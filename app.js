@@ -428,11 +428,108 @@ function closeDrawer() { $('drawer').classList.remove('open'); $('shade').hidden
 $('bMenu').onclick = openDrawer;
 $('shade').onclick = () => { closeDrawer(); todoist.close(); };
 $('dNew').onclick = () => { closeDrawer(); newMap(); };
-$('dExport').onclick = () => {
+$('dExport').onclick = () => deliver(new Blob([JSON.stringify(map, null, 1)], { type: 'application/json' }), fileBase() + '.mindmap.json');
+
+/* ---------- Exporteren: afbeelding (PNG), PDF en tekst (Markdown). Altijd licht thema; ingeklapte takken blijven ingeklapt in beeld. ---------- */
+const fileBase = () => map.title.replace(/[^\p{L}\p{N}\- ]+/gu, '').trim() || 'mindmap';
+async function deliver(blob, name) {   // touch-apparaten: deelmenu (Bestanden, Mail…); anders gewoon downloaden
+  const f = new File([blob], name, { type: blob.type });
+  if (matchMedia('(pointer: coarse)').matches && navigator.canShare?.({ files: [f] })) {
+    try { await navigator.share({ files: [f] }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([JSON.stringify(map, null, 1)], { type: 'application/json' }));
-  a.download = map.title.replace(/[^\w\- ]+/g, '').trim() + '.mindmap.json';
-  a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  a.href = URL.createObjectURL(blob); a.download = name; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+function textLines(el) {   // de regels zoals de browser ze heeft afgebroken
+  const t = el.firstChild.firstChild; if (!t) return [''];
+  const s = t.data, r = document.createRange(), out = []; let cur = '', top = null;
+  for (let i = 0; i < s.length; i++) {
+    r.setStart(t, i); r.setEnd(t, i + 1);
+    const b = r.getClientRects()[0];
+    if (s[i] === '\n') { out.push(cur); cur = ''; top = null; continue; }
+    if (b && b.width && top !== null && b.top > top + 3) { out.push(cur.trimEnd()); cur = ''; }
+    if (b && b.width) top = b.top;
+    cur += s[i];
+  }
+  out.push(cur);
+  return out;
+}
+function drawCanvas() {
+  commitEdit();
+  let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
+  for (const g of geo.values()) { a = Math.min(a, g.x); b = Math.min(b, g.y); c = Math.max(c, g.x + g.w); d = Math.max(d, g.y + g.h); }
+  const M = 24, W = c - a + 2 * M, H = d - b + 2 * M, k = Math.min(2, Math.sqrt(12e6 / (W * H)));
+  const cv = document.createElement('canvas'); cv.width = Math.ceil(W * k); cv.height = Math.ceil(H * k);
+  const x = cv.getContext('2d'), FONT = 'px system-ui, -apple-system, "Segoe UI", sans-serif';
+  x.scale(k, k); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.translate(M - a, M - b);
+  x.lineCap = 'round'; x.textBaseline = 'middle';
+  for (const [id, p] of geo) {
+    const i = info.get(id); if (!i.parent) continue;
+    const q = geo.get(i.parent.id), x1 = p.dir > 0 ? q.x + q.w : q.x, y1 = q.y + q.h / 2, x2 = p.dir > 0 ? p.x : p.x + p.w, y2 = p.y + p.h / 2, mx = (x1 + x2) / 2;
+    x.lineWidth = 2; x.strokeStyle = COLORS[i.color % COLORS.length];
+    x.beginPath(); x.moveTo(x1, y1); x.bezierCurveTo(mx, y1, mx, y2, x2, y2); x.stroke();
+  }
+  for (const [id, el] of els) {
+    const g = geo.get(id), i = info.get(id), t = i.node.task, cs = getComputedStyle(el);
+    const bw = parseFloat(cs.borderTopWidth), fs = parseFloat(cs.fontSize), lh = fs * 1.35, done = t && t.done && !t.gone;
+    x.beginPath(); x.roundRect(g.x + bw / 2, g.y + bw / 2, g.w - bw, g.h - bw, parseFloat(cs.borderTopLeftRadius));
+    x.fillStyle = i.depth ? '#fff' : '#2563eb'; x.fill();
+    x.lineWidth = bw; x.strokeStyle = i.depth ? COLORS[i.color % COLORS.length] : '#2563eb';
+    x.globalAlpha = i.depth > 1 ? 0.55 : 1; x.stroke();
+    x.globalAlpha = done ? 0.6 : 1;
+    x.font = cs.fontWeight + ' ' + fs + FONT; x.fillStyle = i.depth ? '#1c2330' : '#fff';
+    const L = textLines(el), px = g.x + bw + parseFloat(cs.paddingLeft), py = g.y + bw + parseFloat(cs.paddingTop);
+    if (t) L[0] = (t.gone ? '⚠ ' : t.done ? '☑ ' : '☐ ') + L[0];
+    L.forEach((s, j) => { const y = py + (j + 0.5) * lh; x.fillText(s, px, y); if (done) x.fillRect(px, y, x.measureText(s).width, 1); });
+    x.globalAlpha = 1;
+    if (el.dataset.due) { x.font = '400 11' + FONT; x.fillStyle = '#667085'; x.fillText(el.dataset.due, px, py + L.length * lh + 7.5); }
+  }
+  return cv;
+}
+function canvasBytes(cv, type) {
+  const bin = atob(cv.toDataURL(type, 0.92).split(',')[1]), u = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+  return u;
+}
+function makePdf(cv) {   // één A4-pagina (liggend of staand) met de mindmap als afbeelding
+  const jpeg = canvasBytes(cv, 'image/jpeg'), land = cv.width >= cv.height, PW = land ? 842 : 595, PH = land ? 595 : 842, m = 28;
+  const f = Math.min((PW - 2 * m) / cv.width, (PH - 2 * m) / cv.height, 0.6), w = cv.width * f, h = cv.height * f;
+  const enc = new TextEncoder(), parts = [], offs = []; let len = 0;
+  const add = p => { const u = typeof p === 'string' ? enc.encode(p) : p; parts.push(u); len += u.length; };
+  const obj = (n, body) => { offs[n] = len; add(`${n} 0 obj\n${body}\nendobj\n`); };
+  add('%PDF-1.4\n');
+  obj(1, '<< /Type /Catalog /Pages 2 0 R >>');
+  obj(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
+  obj(3, `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PW} ${PH}] /Resources << /XObject << /Im0 4 0 R >> >> /Contents 5 0 R >>`);
+  offs[4] = len;
+  add(`4 0 obj\n<< /Type /XObject /Subtype /Image /Width ${cv.width} /Height ${cv.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${jpeg.length} >>\nstream\n`);
+  add(jpeg); add('\nendstream\nendobj\n');
+  const c = `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${((PW - w) / 2).toFixed(2)} ${((PH - h) / 2).toFixed(2)} cm /Im0 Do Q`;
+  obj(5, `<< /Length ${c.length} >>\nstream\n${c}\nendstream`);
+  const xref = len;
+  add('xref\n0 6\n0000000000 65535 f \n' + [1, 2, 3, 4, 5].map(n => String(offs[n]).padStart(10, '0') + ' 00000 n \n').join(''));
+  add(`trailer\n<< /Size 6 /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`);
+  return new Blob(parts, { type: 'application/pdf' });
+}
+function outline() {
+  let s = '# ' + map.title + '\n\n';
+  (function walk(n, depth) {
+    for (const c of n.children) {
+      const t = c.task && !c.task.gone ? c.task : null;
+      s += '  '.repeat(depth) + '- ' + (t ? (t.done ? '[x] ' : '[ ] ') : '') + c.text.replace(/\s*\n\s*/g, ' ')
+        + (t?.due && !t.done ? ' (deadline ' + fmtDue(t.due) + ')' : '') + '\n';
+      walk(c, depth + 1);
+    }
+  })(map.root, 0);
+  return s;
+}
+$('xPng').onclick = () => { closeDrawer(); deliver(new Blob([canvasBytes(drawCanvas(), 'image/png')], { type: 'image/png' }), fileBase() + '.png'); };
+$('xPdf').onclick = () => { closeDrawer(); deliver(makePdf(drawCanvas()), fileBase() + '.pdf'); };
+$('xMd').onclick = () => { closeDrawer(); deliver(new Blob([outline()], { type: 'text/markdown' }), fileBase() + '.md'); };
+$('xCopy').onclick = async () => {
+  let ok = true; try { await navigator.clipboard.writeText(outline()); } catch { ok = false; }
+  $('xCopy').textContent = ok ? 'Gekopieerd' : 'Kopiëren lukt niet'; setTimeout(() => $('xCopy').textContent = 'Kopieer tekst', 2000);
 };
 $('dImport').onclick = () => $('dFile').click();
 $('dFile').onchange = async e => {
