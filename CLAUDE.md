@@ -14,8 +14,8 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 
 ## Fases
 1. Kern-editor, lokaal opgeslagen — KLAAR (touch/pinch nog niet op echte iPad getest).
-2. Login + cloud-sync + PWA — GEBOUWD. Nog open: `config.js` invullen, `supabase.sql` laten uitvoeren, hosting kiezen (GitHub Pages vereist publieke repo), daarna end-to-end testen met het echte project.
-3. Todoist: taak aanmaken vanuit node (project, deadline, prioriteit) + status terugzien + link. Veld `task` op de node. Eerst checken of Todoist-API rechtstreeks vanuit de browser mag (CORS); anders Supabase Edge Function.
+2. Login + cloud-sync + PWA — KLAAR. Draait op GitHub Pages (repo is publiek): https://mvanoostenrijk-create.github.io/Mindmap-tool/ ; gebruiker bevestigt dat het werkt, ook op iPad.
+3. Todoist — GEBOUWD (module `todoist` in app.js). API v1 (`https://api.todoist.com/api/v1/`), rechtstreeks vanuit de browser met persoonlijk token in localStorage (per apparaat). `node.task = {id, done, due, gone?}` synct mee. Status via GET `tasks/{id}` bij openen, terugkeren naar de app en elke 5 min. Alleen getest met nagebootste API; CORS en gedrag bij afgeronde taken moeten blijken in de praktijk. Plan B bij CORS-blokkade: Supabase Edge Function.
 4. Export: PNG, PDF, Markdown-outline.
 
 Buiten scope: opmaak/thema's, delen/samenwerken. Privé-tool, geen gevoelige informatie.

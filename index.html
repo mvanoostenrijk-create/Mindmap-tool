@@ -31,6 +31,7 @@
   <button id="tSib" title="Enter">+ Tak ernaast</button>
   <button id="tEdit" title="F2 of dubbelklik">Bewerk</button>
   <button id="tFold" title="Spatie">Klap in/uit</button>
+  <button id="tTask" title="Taak in Todoist">✓ Taak</button>
   <button id="tDel" title="Delete">Verwijder</button>
 </nav>
 
@@ -48,12 +49,39 @@
     </form>
     <button id="aOut" hidden>Uitloggen</button>
   </section>
+  <section id="tdSec">
+    <p id="tdStatus"></p>
+    <form id="tdForm">
+      <input id="tdTok" type="password" autocomplete="off" placeholder="Todoist API-token" aria-label="Todoist API-token" required>
+      <button>Koppel Todoist</button>
+    </form>
+    <button id="tdOff" hidden>Todoist ontkoppelen</button>
+  </section>
   <div class="foot">
     <button id="dExport">Download back-up</button>
     <button id="dImport">Back-up terugzetten</button>
     <input id="dFile" type="file" accept=".json,application/json" hidden>
   </div>
 </aside>
+<form id="dlg" hidden role="dialog" aria-label="Taak in Todoist">
+  <h2>Taak in Todoist</h2>
+  <div id="kNew">
+    <label>Taak <input id="kText" required></label>
+    <label>Project <select id="kProj"></select></label>
+    <label>Deadline <input id="kDue" placeholder="bijv. morgen, vrijdag, 17 nov" autocomplete="off"></label>
+    <label>Prioriteit <select id="kPrio"><option value="4">P1 (hoogst)</option><option value="3">P2</option><option value="2">P3</option><option value="1" selected>P4 (geen)</option></select></label>
+  </div>
+  <div id="kHave">
+    <p id="kInfo"></p>
+    <a id="kOpen" target="_blank" rel="noopener">Open in Todoist</a>
+  </div>
+  <p id="kMsg"></p>
+  <div class="row">
+    <button type="button" id="kUnlink">Ontkoppel</button>
+    <button type="button" id="kCancel">Sluiten</button>
+    <button id="kMake" class="primary">Maak taak</button>
+  </div>
+</form>
 <div id="ghost" hidden></div>
 <script src="supabase.js"></script>
 <script src="config.js"></script>

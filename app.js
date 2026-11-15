@@ -87,7 +87,9 @@ function render() {
   for (const [id, i] of info) {
     if (!i.visible) continue;
     const el = els.get(id) || mkEl(id), n = i.node;
-    el.className = 'node ' + (i.depth ? i.side : 'root') + ' d' + Math.min(i.depth, 2) + (id === sel ? ' sel' : '');
+    el.className = 'node ' + (i.depth ? i.side : 'root') + ' d' + Math.min(i.depth, 2) + (id === sel ? ' sel' : '')
+      + (n.task ? ' task' + (n.task.gone ? ' gone' : n.task.done ? ' done' : '') : '');
+    if (n.task?.due && !n.task.done && !n.task.gone) el.dataset.due = fmtDue(n.task.due); else delete el.dataset.due;
     if (i.depth) el.style.setProperty('--c', COLORS[i.color % COLORS.length]);
     const txt = el.firstChild, tog = el.lastChild;
     if (id !== editing && txt.textContent !== n.text) txt.textContent = n.text;
@@ -140,7 +142,7 @@ function ui() {
   $('title').textContent = map.title;
   document.title = map.title + ' · Mindmap';
   const i = sel && info.get(sel);
-  $('tChild').disabled = $('tEdit').disabled = !i;
+  $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
   $('tSib').disabled = $('tDel').disabled = !i || !i.parent;
   $('tFold').disabled = !i || !i.parent || !i.node.children.length;
   $('bUndo').disabled = !undo.length; $('bRedo').disabled = !redo.length;
@@ -349,7 +351,7 @@ function nav(key) {
 }
 
 document.addEventListener('keydown', e => {
-  if (!map || $('drawer').classList.contains('open') || e.target.matches('input')) { if (e.key === 'Escape') closeDrawer(); return; }
+  if (!map || $('drawer').classList.contains('open') || !$('dlg').hidden || e.target.matches('input,select')) { if (e.key === 'Escape') { closeDrawer(); todoist.close(); } return; }
   if (editing) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     else if (e.key === 'Escape') { e.preventDefault(); commitEdit(true); }
@@ -390,6 +392,7 @@ async function openMap(m) {
   els.clear();
   store.setLast(m.id);
   render(); fit();
+  todoist.refresh();
 }
 const FRESH = 'Nieuwe mindmap';
 const pristine = m => !m.root.children.length && m.root.text === FRESH;
@@ -423,7 +426,7 @@ async function drawList() {
 function openDrawer() { commitEdit(); flush(); drawList(); $('drawer').classList.add('open'); $('shade').hidden = false; }
 function closeDrawer() { $('drawer').classList.remove('open'); $('shade').hidden = true; }
 $('bMenu').onclick = openDrawer;
-$('shade').onclick = closeDrawer;
+$('shade').onclick = () => { closeDrawer(); todoist.close(); };
 $('dNew').onclick = () => { closeDrawer(); newMap(); };
 $('dExport').onclick = () => {
   const a = document.createElement('a');
@@ -442,6 +445,109 @@ $('dFile').onchange = async e => {
     await store.save(m); closeDrawer(); openMap(m);
   } catch { $('dImport').textContent = 'Geen geldige back-up'; setTimeout(() => $('dImport').textContent = 'Back-up terugzetten', 2500); }
 };
+
+/* ---------- Todoist. De koppeling (node.task) zit in de mindmap en synct mee; het token staat alleen op dit apparaat. ---------- */
+const fmtDue = d => new Date(d.length === 10 ? d + 'T00:00' : d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
+const todoist = (() => {
+  const API = 'https://api.todoist.com/api/v1/', KEY = 'mm:todoist', PKEY = 'mm:todoist-project';
+  const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k) || ''; v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} return ''; };
+  let projects = null, nodeId = null, busy = false, checking = false;
+  const tok = () => ls(KEY);
+  async function call(path, body, token = tok()) {
+    const r = await fetch(API + path, {
+      method: body ? 'POST' : 'GET', body: body && JSON.stringify(body),
+      headers: { Authorization: 'Bearer ' + token, ...(body && { 'Content-Type': 'application/json' }) }
+    });
+    if (r.status === 404) return null;
+    if (!r.ok) throw Object.assign(new Error('Todoist ' + r.status), { status: r.status });
+    return r.json();
+  }
+  const explain = e => e.status === 401 || e.status === 403 ? 'Todoist weigert het token. Controleer of je het volledig hebt geplakt.'
+    : e.status === 400 ? 'Todoist begreep de invoer niet. Controleer de deadline.'
+    : e.status ? 'Todoist gaf een fout (' + e.status + '). Probeer het later opnieuw.'
+    : 'Todoist is niet bereikbaar. Controleer je internetverbinding.';
+  async function loadProjects(token) {
+    const out = []; let cursor = '';
+    do {
+      const d = await call('projects?limit=200' + (cursor ? '&cursor=' + encodeURIComponent(cursor) : ''), null, token);
+      out.push(...(Array.isArray(d) ? d : d?.results || []));
+      cursor = Array.isArray(d) ? '' : d?.next_cursor || '';
+    } while (cursor);
+    return out.sort((a, b) => (b.inbox_project ? 1 : 0) - (a.inbox_project ? 1 : 0));
+  }
+  function drawAcct(msg) {
+    const on = !!tok();
+    $('tdStatus').textContent = msg || (on ? 'Todoist is gekoppeld op dit apparaat.'
+      : 'Koppel Todoist om van een tak een taak te maken. Je API-token staat in Todoist onder Instellingen → Integraties → Ontwikkelaar.');
+    $('tdForm').hidden = on; $('tdOff').hidden = !on;
+  }
+  function fillProjects() {
+    const s = $('kProj'); s.textContent = '';
+    for (const p of projects || []) s.add(new Option(p.inbox_project ? 'Inbox' : p.name, p.id));
+    if ([...s.options].some(o => o.value === ls(PKEY))) s.value = ls(PKEY);
+  }
+  function drawInfo() {
+    const t = nodeId && info.get(nodeId)?.node.task; if (!t) return;
+    $('kInfo').textContent = t.gone ? 'Deze taak bestaat niet meer in Todoist.' : t.done ? 'Afgerond in Todoist.' : 'Nog open' + (t.due ? ', deadline ' + fmtDue(t.due) : '') + '.';
+    $('kOpen').href = 'https://app.todoist.com/app/task/' + t.id;
+  }
+  async function open() {
+    commitEdit();
+    const i = sel && info.get(sel); if (!i) return;
+    if (!tok()) { openDrawer(); $('tdTok').focus(); return; }
+    nodeId = sel; const t = i.node.task;
+    $('kNew').hidden = $('kMake').hidden = !!t; $('kHave').hidden = $('kUnlink').hidden = !t; $('kMsg').textContent = '';
+    $('dlg').hidden = false; $('shade').hidden = false;
+    if (t) { drawInfo(); await refresh(); return drawInfo(); }
+    $('kText').value = i.node.text; $('kDue').value = ''; $('kPrio').value = '1'; fillProjects();
+    if (!projects) try { $('kMsg').textContent = 'Projecten laden…'; projects = await loadProjects(); fillProjects(); $('kMsg').textContent = ''; } catch (e) { $('kMsg').textContent = explain(e); }
+  }
+  function close() { if ($('dlg').hidden) return; $('dlg').hidden = true; $('shade').hidden = true; nodeId = null; }
+  async function make() {
+    const content = $('kText').value.trim(), id = nodeId;
+    if (!content || busy || !id) return;
+    busy = true; $('kMsg').textContent = 'Taak wordt aangemaakt…';
+    try {
+      const body = { content, description: 'Uit mindmap: ' + map.title, priority: +$('kPrio').value };
+      if ($('kProj').value) { body.project_id = $('kProj').value; ls(PKEY, body.project_id); }
+      if ($('kDue').value.trim()) { body.due_string = $('kDue').value.trim(); body.due_lang = 'nl'; }
+      const t = await call('tasks', body), n = info.get(id)?.node;
+      if (n) change(() => { n.task = { id: t.id, done: false, due: t.due?.date || null }; });
+      close();
+    } catch (e) { $('kMsg').textContent = explain(e); }
+    busy = false;
+  }
+  // Status ophalen van alle gekoppelde taken in de open mindmap
+  async function refresh() {
+    if (!tok() || !map || checking) return;
+    checking = true;
+    const mapId = map.id, todo = [], got = new Map();
+    for (const [id, i] of info) if (i.node.task && !i.node.task.gone && todo.length < 40) todo.push([id, i.node.task.id]);
+    try { for (const [, tid] of todo) got.set(tid, await call('tasks/' + encodeURIComponent(tid))); } catch {}
+    checking = false;
+    if (!map || map.id !== mapId) return;
+    let changed = false;
+    for (const [id, tid] of todo) {
+      const t = info.get(id)?.node.task; if (!t || t.id !== tid || !got.has(tid)) continue;
+      const r = got.get(tid), next = !r || r.is_deleted ? { gone: true } : { done: !!r.checked, due: r.due?.date || null };
+      for (const k in next) if ((t[k] ?? null) !== (next[k] ?? null)) { t[k] = next[k]; changed = true; }
+    }
+    if (changed) { touch(); render(); }
+  }
+  $('tTask').onclick = open;
+  $('kCancel').onclick = close;
+  $('dlg').onsubmit = e => { e.preventDefault(); make(); };
+  $('kUnlink').onclick = () => { const n = nodeId && info.get(nodeId)?.node; if (n) change(() => { delete n.task; }); close(); };
+  $('tdForm').onsubmit = async e => {
+    e.preventDefault(); const t = $('tdTok').value.trim(); drawAcct('Controleren…');
+    try { projects = await loadProjects(t); ls(KEY, t); $('tdTok').value = ''; drawAcct(); refresh(); } catch (err) { drawAcct(explain(err)); }
+  };
+  $('tdOff').onclick = () => { ls(KEY, null); projects = null; drawAcct(); };
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refresh(); });
+  setInterval(() => { if (!document.hidden) refresh(); }, 300000);
+  drawAcct();
+  return { refresh, close };
+})();
 
 /* ---------- Cloud-sync (Supabase). Lokaal blijft leidend voor snelheid en offline; per mindmap wint de laatste wijziging. ---------- */
 const cloud = (() => {

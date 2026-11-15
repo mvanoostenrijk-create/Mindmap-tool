@@ -89,6 +89,26 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 }
 #tDel { color: var(--danger); margin-left: auto; }
 
+.node.task .txt::before { content: "☐ "; }
+.node.task.done .txt::before { content: "☑ "; }
+.node.task.done .txt { text-decoration: line-through; opacity: .6; }
+.node.task.gone .txt::before { content: "⚠ "; }
+.node[data-due]::after { content: attr(data-due); display: block; font-size: 11px; font-weight: 400; color: var(--muted); }
+#tdSec { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+#tdStatus, #kMsg, #kInfo { margin: 0; color: var(--muted); font-size: 13px; }
+#tdForm { display: flex; flex-direction: column; gap: 8px; }
+#dlg { position: fixed; z-index: 11; left: 50%; top: 12%; transform: translateX(-50%); width: min(380px, 92vw);
+  display: flex; flex-direction: column; gap: 12px; padding: 16px; border-radius: 14px;
+  background: var(--surface); border: 1px solid var(--line); box-shadow: 0 12px 40px rgba(0, 0, 0, .3); }
+#dlg h2 { margin: 0; font-size: 17px; }
+#kNew, #kHave { display: flex; flex-direction: column; gap: 10px; }
+#dlg label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+#dlg .row { display: flex; gap: 8px; justify-content: flex-end; }
+#kUnlink { margin-right: auto; color: var(--danger); }
+#kOpen { color: var(--accent); }
+select { font: inherit; font-size: 16px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; }
+
 #shade { position: fixed; inset: 0; background: rgba(0, 0, 0, .35); z-index: 9; }
 #drawer {
   position: fixed; left: 0; top: 0; bottom: 0; width: min(320px, 86vw); z-index: 10;
