@@ -24,7 +24,7 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 3. Todoist — KLAAR (module `todoist` in app.js). API v1 (`https://api.todoist.com/api/v1/`), rechtstreeks vanuit de browser met persoonlijk token in localStorage (per apparaat). `node.task = {id, done, due, gone?}` synct mee. Status via GET `tasks/{id}` bij openen, terugkeren naar de app en elke 5 min. Gebruiker bevestigt dat het werkt.
 4. Export — GEBOUWD (zijbalk): PNG via canvas (`drawCanvas`, altijd licht thema), PDF als zelfgebouwd één-pagina-A4-bestand met JPEG (`makePdf`), Markdown-outline (`outline`) als bestand of naar klembord. `deliver()` gebruikt op touch-apparaten het deelmenu, anders download. Getest in Chromium; deelmenu op iPad nog niet bevestigd.
 
-6. Verbindingen, afbeeldingen + Pexels, Claude-paneel — GEBOUWD; Pexels en Claude alleen getest met nagebootste API's (CORS in de praktijk onbevestigd). Webvoorbeeld van een link: nog niet gebouwd, wacht op keuze van de gebruiker.
+6. Verbindingen, afbeeldingen + Pexels, Claude-paneel — GEBOUWD; Pexels en Claude alleen getest met nagebootste API's (CORS in de praktijk onbevestigd). Webvoorbeeld van een link via `api.microlink.io` (schermafbeelding → `node.img`), knop `fLinkShot` in module `media`; ook alleen nagebootst getest.
 
 5. Opmaak per tak, thema's per mindmap, overzichtspagina, README — GEBOUWD, getest in Chromium.
 

@@ -58,6 +58,7 @@ Selecteer een tak en klik op "Opmaak".
 - **Afbeelding:** kies een eigen bestand of zoek een stockfoto. De afbeelding wordt verkleind tot een miniatuur en in de mindmap zelf bewaard; het origineel niet.
 - **Notitie:** extra toelichting. De tak krijgt een 🗒 en de notitie verschijnt onderin beeld als je de tak selecteert.
 - **Link:** een webadres. De tak krijgt een 🔗 en de link verschijnt onderin beeld als je de tak selecteert.
+- **Voorbeeld van de link:** de knop onder het linkveld maakt een schermafbeelding van de website en zet die als miniatuur in de tak. Het webadres gaat daarvoor naar de externe dienst Microlink; dat gebeurt alleen als je op de knop klikt. De gratis dienst heeft een daglimiet, en pagina's achter een login geven hooguit het inlogscherm.
 
 ## Stockfoto's
 

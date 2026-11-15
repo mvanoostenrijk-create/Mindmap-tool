@@ -910,6 +910,22 @@ const media = (() => {
       }));
     } catch (e) { msg(e.status === 401 || e.status === 403 ? src + ' weigert de aanvraag' + (src === 'Pexels' ? '. Controleer de sleutel onder ☰.' : '.') : e.status === 429 ? 'De limiet van ' + src + ' is bereikt. Probeer het later opnieuw.' : src + ' is niet bereikbaar.'); }
   }
+  // Voorbeeld van een website: schermafbeelding via de externe dienst Microlink; alleen het webadres gaat daarheen
+  $('fLinkShot').onclick = async () => {
+    let link = $('fLink').value.trim();
+    if (!link) return msg('Vul eerst een link in.');
+    if (!/^https?:\/\//i.test(link)) link = 'https://' + link;
+    const api = 'https://api.microlink.io/?screenshot=true&meta=false&url=' + encodeURIComponent(link);
+    msg('Voorbeeld maken… dit kan tot een halve minuut duren.');
+    try {
+      const r = await fetch(api);
+      if (!r.ok) throw Object.assign(new Error(), { status: r.status });
+      const shot = (await r.json()).data?.screenshot?.url;
+      for (const url of [shot, api + '&embed=screenshot.url'].filter(Boolean))
+        try { const img = await shrink(await (await fetch(url)).blob()); img.by = 'Voorbeeld van ' + new URL(link).hostname; set(img); return msg(''); } catch {}
+      msg('Het voorbeeld is gemaakt, maar kon niet worden opgehaald.');
+    } catch (e) { msg(e.status === 429 ? 'De daglimiet van de voorbeelddienst is bereikt. Probeer het morgen opnieuw.' : e.status ? 'De voorbeelddienst kan deze pagina niet openen. Controleer de link.' : 'De voorbeelddienst is niet bereikbaar.'); }
+  };
   $('fStockGo').onclick = search;
   $('fStockQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
   return { reset };
