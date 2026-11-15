@@ -126,6 +126,12 @@ function layout() {
     d += `<path d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke="${COLORS[i.color % COLORS.length]}"/>`;
   }
   edges.innerHTML = d;
+  // De SVG krijgt de echte afmetingen van de mindmap; Safari laat anders sporen achter bij het schuiven.
+  let a = 0, b = 0, c = 0, e = 0;
+  for (const q of geo.values()) { a = Math.min(a, q.x); b = Math.min(b, q.y); c = Math.max(c, q.x + q.w); e = Math.max(e, q.y + q.h); }
+  a -= 8; b -= 8; const w = c - a + 8, h = e - b + 8;
+  edges.setAttribute('viewBox', `${a} ${b} ${w} ${h}`);
+  Object.assign(edges.style, { left: a + 'px', top: b + 'px', width: w + 'px', height: h + 'px' });
   applyView();
 }
 function applyView() { world.style.transform = `translate(${view.x}px,${view.y}px) scale(${view.s})`; }
@@ -249,7 +255,7 @@ canvas.addEventListener('pointerdown', e => {
   if (e.target.closest('.tog')) return;
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.setPointerCapture(e.pointerId);
-  if (pts.size === 2) { endDrag(); g = { type: 'pinch', ...pinchState() }; return; }
+  if (pts.size === 2) { endDrag(); world.classList.add('moving'); g = { type: 'pinch', ...pinchState() }; return; }
   if (pts.size > 2) return;
   const id = nodeEl?.dataset.id;
   if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
@@ -272,6 +278,7 @@ canvas.addEventListener('pointermove', e => {
     Object.assign(g, p);
   } else if (g.type === 'pan') {
     if (!g.moved && Math.hypot(dx, dy) < 5) return;
+    if (!g.moved) world.classList.add('moving');
     g.moved = true; view.x = g.vx + dx; view.y = g.vy + dy; applyView();
   } else if (g.type === 'node') {
     if (!g.moved) {
@@ -304,6 +311,7 @@ function endDrag() {
 
 function pointerEnd(e, cancelled) {
   if (!pts.delete(e.pointerId)) return;
+  if (!pts.size) world.classList.remove('moving');
   const was = g;
   if (!was) return;
   if (was.type === 'pinch') { if (pts.size < 2) g = null; return; }

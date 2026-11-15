@@ -52,6 +52,7 @@ button.primary { background: var(--accent); color: var(--accent-text); border-co
 #canvas { flex: 1; position: relative; overflow: hidden; touch-action: none;
   user-select: none; -webkit-user-select: none; cursor: grab; }
 #world { position: absolute; left: 0; top: 0; width: 0; height: 0; transform-origin: 0 0; }
+#world.moving { will-change: transform; }
 #edges { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; }
 #edges path { fill: none; stroke-width: 2; stroke-linecap: round; }
 
