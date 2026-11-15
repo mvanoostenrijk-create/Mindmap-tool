@@ -1328,4 +1328,9 @@ addEventListener('pagehide', flush);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 addEventListener('resize', () => map && applyView());
 
+// iOS schuift de pagina omhoog als het toetsenbord verschijnt en zet hem niet altijd terug; dan is de bovenbalk weg.
+const unscroll = () => { if (scrollY || scrollX) scrollTo(0, 0); };
+document.addEventListener('focusout', () => setTimeout(unscroll, 150));
+window.visualViewport?.addEventListener('resize', () => { if (!editing && !document.activeElement?.matches?.('input,textarea,select')) unscroll(); });
+
 route();

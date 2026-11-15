@@ -203,3 +203,7 @@ body.home .mapOnly { display: none !important; }
 #peekFiles { display: flex; gap: 6px; flex-wrap: wrap; }
 #peekFiles button { min-height: 30px; padding: 2px 8px; font-size: 13px; }
 .sug label.del span { color: var(--danger); }
+
+/* iOS: de pagina zelf mag nooit schuiven, anders verdwijnt de bovenbalk na het typen */
+html { overflow: hidden; }
+body { position: fixed; inset: 0; height: auto; }
