@@ -7,7 +7,9 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 ## Opzet app.js
 - `store`: lokale opslag (localStorage) met async `list/load/save/remove`; blijft leidend (offline).
 - `cloud`: sync met Supabase-tabel `maps`, per mindmap wint de laatste wijziging (`updated`), verwijderen via tombstone (`deleted`). Alleen inloggen met e-mail + wachtwoord; gebruiker is handmatig in Supabase aangemaakt. Getest met nagebootste backend, zie fases.
-- Model: `map = {id,title,updated,root}`; node = `{id,text,children[],collapsed?,side?,color?}`. `side`/`color` alleen op kinderen van de root. Titel = tekst van de root.
+- Model: `map = {id,title,updated,root,theme?}`; node = `{id,text,children[],collapsed?,side?,color?,icon?,note?,link?,task?}`. `side` alleen op kinderen van de root; `color` (index in palet) erft naar beneden. `theme = {style,edge,palette}` (zie `theme()`, `PALETTES`). Titel = tekst van de root.
+- Overzicht (`#portal`, `drawList`, `miniSvg`) is de startpagina; `route()` kiest op basis van `#m=<id>`. `body.home` = overzicht zichtbaar. `arrange()` is de gedeelde boomindeling (editor en miniaturen).
+- Opmaak-venster: module `format`. Icoon/taak/notitie/link tonen via `data-pre`/`data-post` op `.txt` (`pre()`, `post()`), ook in de export.
 - `render()` → `index()` (info per node) → DOM-nodes in `#world` → `layout()` (automatische boomindeling, links/rechts) → SVG-lijnen.
 - Wijzigingen altijd via `change(fn)` (undo-snapshot + opslaan + render).
 - Invoer: pointer events (pan, pinch, slepen = verplaatsen/herordenen, dubbeltik = bewerken) en toetsenbord (Tab, Enter, Delete, F2, spatie, pijlen, Ctrl+Z/Y).
@@ -18,4 +20,6 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 3. Todoist — KLAAR (module `todoist` in app.js). API v1 (`https://api.todoist.com/api/v1/`), rechtstreeks vanuit de browser met persoonlijk token in localStorage (per apparaat). `node.task = {id, done, due, gone?}` synct mee. Status via GET `tasks/{id}` bij openen, terugkeren naar de app en elke 5 min. Gebruiker bevestigt dat het werkt.
 4. Export — GEBOUWD (zijbalk): PNG via canvas (`drawCanvas`, altijd licht thema), PDF als zelfgebouwd één-pagina-A4-bestand met JPEG (`makePdf`), Markdown-outline (`outline`) als bestand of naar klembord. `deliver()` gebruikt op touch-apparaten het deelmenu, anders download. Getest in Chromium; deelmenu op iPad nog niet bevestigd.
 
-Buiten scope: opmaak/thema's, delen/samenwerken. Privé-tool, geen gevoelige informatie.
+5. Opmaak per tak, thema's per mindmap, overzichtspagina, README — GEBOUWD, getest in Chromium.
+
+Buiten scope: delen/samenwerken. README.md is de gebruikershandleiding: bijwerken bij nieuwe functies. Privé-tool, geen gevoelige informatie.

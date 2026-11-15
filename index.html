@@ -14,9 +14,10 @@
 </head>
 <body>
 <header id="top">
-  <button id="bMenu" title="Mijn mindmaps" aria-label="Mijn mindmaps">☰</button>
+  <button id="bHome" title="Alle mindmaps" aria-label="Alle mindmaps">⌂</button>
+  <button id="bMenu" title="Instellingen en export" aria-label="Instellingen en export">☰</button>
   <h1 id="title"></h1>
-  <button id="bSync" aria-label="Synchronisatie en account">☁</button>
+  <button id="bSync" class="sync" aria-label="Synchronisatie en account">☁</button>
   <button id="bUndo"title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
   <button id="bRedo" title="Opnieuw (Ctrl+Y)" aria-label="Opnieuw">↷</button>
   <button id="bOut" title="Uitzoomen" aria-label="Uitzoomen">−</button>
@@ -26,20 +27,23 @@
 
 <main id="canvas"><div id="world"><svg id="edges" width="1" height="1"></svg></div></main>
 
+<div id="peek" hidden><a id="peekLink" target="_blank" rel="noopener"></a><span id="peekNote"></span></div>
 <nav id="tools">
   <button id="tChild" title="Tab">+ Subtak</button>
   <button id="tSib" title="Enter">+ Tak ernaast</button>
   <button id="tEdit" title="F2 of dubbelklik">Bewerk</button>
   <button id="tFold" title="Spatie">Klap in/uit</button>
+  <button id="tFmt" title="Kleur, icoon, notitie, link en thema">Opmaak</button>
   <button id="tTask" title="Taak in Todoist">✓ Taak</button>
   <button id="tDel" title="Delete">Verwijder</button>
 </nav>
 
 <div id="shade" hidden></div>
-<aside id="drawer" aria-label="Mijn mindmaps">
-  <h2>Mijn mindmaps</h2>
-  <button id="dNew" class="primary">+ Nieuwe mindmap</button>
-  <ul id="dList"></ul>
+<aside id="drawer" aria-label="Instellingen">
+  <h2>Instellingen</h2>
+  <label class="look">Weergave
+    <select id="lLook"><option value="auto">Automatisch (volgt apparaat)</option><option value="light">Licht</option><option value="dark">Donker</option></select>
+  </label>
   <section id="acct">
     <p id="aStatus"></p>
     <form id="aForm">
@@ -57,19 +61,19 @@
     </form>
     <button id="tdOff" hidden>Todoist ontkoppelen</button>
   </section>
-  <div class="foot">
+  <div class="foot mapOnly">
     <button id="xPng">Afbeelding</button>
     <button id="xPdf">PDF</button>
     <button id="xMd">Tekst</button>
     <button id="xCopy">Kopieer tekst</button>
   </div>
   <div class="foot">
-    <button id="dExport">Download back-up</button>
+    <button id="dExport" class="mapOnly">Download back-up</button>
     <button id="dImport">Back-up terugzetten</button>
     <input id="dFile" type="file" accept=".json,application/json" hidden>
   </div>
 </aside>
-<form id="dlg" hidden role="dialog" aria-label="Taak in Todoist">
+<form id="dlg" class="dlg" hidden role="dialog" aria-label="Taak in Todoist">
   <h2>Taak in Todoist</h2>
   <div id="kNew">
     <label>Taak <input id="kText" required></label>
@@ -88,6 +92,26 @@
     <button id="kMake" class="primary">Maak taak</button>
   </div>
 </form>
+<form id="fmt" class="dlg" hidden role="dialog" aria-label="Opmaak">
+  <h2>Opmaak van deze tak</h2>
+  <div class="grp">Kleur (geldt ook voor de takken eronder)<div id="fColors" class="chips"></div></div>
+  <div class="grp">Icoon<div id="fIcons" class="chips"></div></div>
+  <label>Notitie <textarea id="fNote" rows="3"></textarea></label>
+  <label>Link <input id="fLink" inputmode="url" autocomplete="off" placeholder="https://…"></label>
+  <h2>Thema van deze mindmap</h2>
+  <label>Stijl <select id="fStyle"><option value="omlijnd">Omlijnd</option><option value="gevuld">Gevuld</option><option value="minimaal">Minimaal</option></select></label>
+  <label>Lijnen <select id="fEdge"><option value="boog">Gebogen</option><option value="recht">Recht</option><option value="haaks">Haaks</option></select></label>
+  <label>Kleurenschema <select id="fPal"><option value="kleurrijk">Kleurrijk</option><option value="oceaan">Oceaan</option><option value="aarde">Aarde</option><option value="grijs">Grijs</option></select></label>
+  <div class="row"><button class="primary">Klaar</button></div>
+</form>
+<section id="portal">
+  <header>
+    <h1>Mijn mindmaps</h1>
+    <input id="pSearch" type="search" placeholder="Zoeken" aria-label="Zoeken in mindmaps">
+    <button id="pAcct" class="sync">☁ Account en instellingen</button>
+  </header>
+  <div id="pGrid"></div>
+</section>
 <div id="ghost" hidden></div>
 <script src="supabase.js"></script>
 <script src="config.js"></script>

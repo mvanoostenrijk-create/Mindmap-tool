@@ -32,7 +32,20 @@ const store = (() => {
 /* ---------- Toestand ---------- */
 const $ = id => document.getElementById(id);
 const canvas = $('canvas'), world = $('world'), edges = $('edges'), ghost = $('ghost');
-const COLORS = ['#e5484d', '#f08c1a', '#2f9e6b', '#3b82f6', '#8b5cf6', '#d6409f', '#0ea5a4', '#b7791f'];
+const PALETTES = {
+  kleurrijk: { root: '#2563eb', c: ['#e5484d', '#f08c1a', '#2f9e6b', '#3b82f6', '#8b5cf6', '#d6409f', '#0ea5a4', '#b7791f'] },
+  oceaan: { root: '#0f4c81', c: ['#0e7490', '#2563eb', '#0d9488', '#4f46e5', '#0284c7', '#1d4ed8', '#047857', '#6366f1'] },
+  aarde: { root: '#7c2d12', c: ['#b45309', '#4d7c0f', '#9f1239', '#a16207', '#15803d', '#c2410c', '#78716c', '#92400e'] },
+  grijs: { root: '#1f2937', c: ['#475569', '#64748b', '#334155', '#6b7280', '#52525b', '#57534e', '#3f3f46', '#71717a'] }
+};
+let COLORS = PALETTES.kleurrijk.c;
+// Thema hoort bij de mindmap (synct mee): stijl van de takken, vorm van de lijnen, kleurenschema.
+const theme = () => { const t = map?.theme || {}; return { style: t.style || 'omlijnd', edge: t.edge || 'boog', pal: PALETTES[t.palette] || PALETTES.kleurrijk }; };
+const pre = n => (n.icon ? n.icon + ' ' : '') + (n.task ? (n.task.gone ? '⚠ ' : n.task.done ? '☑ ' : '☐ ') : '');
+const post = n => (n.note ? ' 🗒' : '') + (n.link ? ' 🔗' : '');
+const setLook = v => { v && v !== 'auto' ? document.documentElement.dataset.theme = v : delete document.documentElement.dataset.theme; };
+const getLook = () => { try { return localStorage.getItem('mm:look') || 'auto'; } catch { return 'auto'; } };
+setLook(getLook());
 const HG = 52, VG = 12;
 let map = null, sel = null, editing = null, editOrig = '';
 let view = { x: 0, y: 0, s: 1 };
@@ -48,7 +61,7 @@ function index() {
   (function walk(n, parent, depth, side, color, visible) {
     info.set(n.id, { node: n, parent, depth, side, color, visible });
     for (const c of n.children)
-      walk(c, n, depth + 1, depth ? side : (c.side || 'right'), depth ? color : (c.color || 0), visible && (!n.collapsed || !depth));
+      walk(c, n, depth + 1, depth ? side : (c.side || 'right'), c.color ?? (depth ? color : 0), visible && (!n.collapsed || !depth));
   })(map.root, null, 0, null, 0, true);
 }
 function touch() {
@@ -84,6 +97,7 @@ const countAll = n => n.children.reduce((a, c) => a + 1 + countAll(c), 0);
 
 function render() {
   index();
+  const th = theme(); COLORS = th.pal.c; world.dataset.style = th.style; world.style.setProperty('--rootc', th.pal.root);
   for (const [id, i] of info) {
     if (!i.visible) continue;
     const el = els.get(id) || mkEl(id), n = i.node;
@@ -91,7 +105,9 @@ function render() {
       + (n.task ? ' task' + (n.task.gone ? ' gone' : n.task.done ? ' done' : '') : '');
     if (n.task?.due && !n.task.done && !n.task.gone) el.dataset.due = fmtDue(n.task.due); else delete el.dataset.due;
     if (i.depth) el.style.setProperty('--c', COLORS[i.color % COLORS.length]);
-    const txt = el.firstChild, tog = el.lastChild;
+    const txt = el.firstChild, tog = el.lastChild, a = pre(n), z = post(n);
+    if (a) txt.dataset.pre = a; else delete txt.dataset.pre;
+    if (z) txt.dataset.post = z; else delete txt.dataset.post;
     if (id !== editing && txt.textContent !== n.text) txt.textContent = n.text;
     tog.hidden = !i.depth || !n.children.length;
     tog.textContent = n.collapsed ? countAll(n) : '−';
@@ -101,31 +117,39 @@ function render() {
   layout(); ui();
 }
 
+// Boomindeling: midden op (0,0), takken links en rechts. size(node) geeft {w,h}; ook gebruikt voor de miniaturen in het overzicht.
+function arrange(root, size, hg, vg) {
+  const out = new Map(), sh = new Map(), kids = n => (n.collapsed && n !== root ? [] : n.children);
+  const G = n => { let g = out.get(n.id); if (!g) out.set(n.id, g = { ...size(n) }); return g; };
+  const H = n => { if (!sh.has(n.id)) sh.set(n.id, Math.max(G(n).h, stackH(kids(n)))); return sh.get(n.id); };
+  const stackH = l => l.reduce((a, c) => a + H(c), 0) + vg * Math.max(0, l.length - 1);
+  const stack = (l, x, cy, dir) => { let y = cy - stackH(l) / 2; for (const c of l) { const h = H(c); place(c, x, y + h / 2, dir); y += h + vg; } };
+  const place = (n, x, cy, dir) => {
+    const g = G(n);
+    g.x = dir > 0 ? x : x - g.w; g.y = cy - g.h / 2; g.dir = dir;
+    stack(kids(n), dir > 0 ? x + g.w + hg : x - g.w - hg, cy, dir);
+  };
+  const g = G(root);
+  g.x = -g.w / 2; g.y = -g.h / 2; g.dir = 0;
+  stack(root.children.filter(c => c.side !== 'left'), g.w / 2 + hg, 0, 1);
+  stack(root.children.filter(c => c.side === 'left'), -g.w / 2 - hg, 0, -1);
+  return out;
+}
+function edgePath(x1, y1, x2, y2, kind) {
+  const mx = (x1 + x2) / 2;
+  return kind === 'recht' ? `M${x1} ${y1}L${x2} ${y2}` : kind === 'haaks' ? `M${x1} ${y1}H${mx}V${y2}H${x2}` : `M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}`;
+}
+const edgeEnds = (p, q) => [p.dir > 0 ? q.x + q.w : q.x, q.y + q.h / 2, p.dir > 0 ? p.x : p.x + p.w, p.y + p.h / 2];
+
 function layout() {
   geo.clear();
-  for (const [id, el] of els) geo.set(id, { w: el.offsetWidth, h: el.offsetHeight });
-  const kids = n => (n.collapsed ? [] : n.children), sh = new Map();
-  const H = n => { if (!sh.has(n.id)) sh.set(n.id, Math.max(geo.get(n.id).h, stackH(kids(n)))); return sh.get(n.id); };
-  const stackH = l => l.reduce((a, c) => a + H(c), 0) + VG * Math.max(0, l.length - 1);
-  const stack = (l, x, cy, dir) => { let y = cy - stackH(l) / 2; for (const c of l) { const h = H(c); place(c, x, y + h / 2, dir); y += h + VG; } };
-  const place = (n, x, cy, dir) => {
-    const g = geo.get(n.id);
-    g.x = dir > 0 ? x : x - g.w; g.y = cy - g.h / 2; g.dir = dir;
-    stack(kids(n), dir > 0 ? x + g.w + HG : x - g.w - HG, cy, dir);
-  };
-  const r = map.root, g = geo.get(r.id);
-  g.x = -g.w / 2; g.y = -g.h / 2; g.dir = 0;
-  stack(r.children.filter(c => c.side !== 'left'), g.w / 2 + HG, 0, 1);
-  stack(r.children.filter(c => c.side === 'left'), -g.w / 2 - HG, 0, -1);
-
+  for (const [k, v] of arrange(map.root, n => { const el = els.get(n.id); return { w: el.offsetWidth, h: el.offsetHeight }; }, HG, VG)) geo.set(k, v);
+  const kind = theme().edge;
   let d = '';
   for (const [id, el] of els) {
     const p = geo.get(id), i = info.get(id);
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
-    if (!i.parent) continue;
-    const q = geo.get(i.parent.id);
-    const x1 = p.dir > 0 ? q.x + q.w : q.x, y1 = q.y + q.h / 2, x2 = p.dir > 0 ? p.x : p.x + p.w, y2 = p.y + p.h / 2, mx = (x1 + x2) / 2;
-    d += `<path d="M${x1} ${y1}C${mx} ${y1} ${mx} ${y2} ${x2} ${y2}" stroke="${COLORS[i.color % COLORS.length]}"/>`;
+    if (i.parent) d += `<path d="${edgePath(...edgeEnds(p, geo.get(i.parent.id)), kind)}" stroke="${COLORS[i.color % COLORS.length]}"/>`;
   }
   edges.innerHTML = d;
   // De SVG krijgt de echte afmetingen van de mindmap; Safari laat anders sporen achter bij het schuiven.
@@ -143,6 +167,10 @@ function ui() {
   document.title = map.title + ' · Mindmap';
   const i = sel && info.get(sel);
   $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
+  const n = i && i.node;
+  $('peek').hidden = !(n && (n.note || n.link));
+  $('peekLink').hidden = !(n && n.link); $('peekNote').textContent = n && n.note || '';
+  if (n && n.link) { $('peekLink').href = n.link; $('peekLink').textContent = '🔗 ' + n.link.replace(/^https?:\/\//, '').slice(0, 40); }
   $('tSib').disabled = $('tDel').disabled = !i || !i.parent;
   $('tFold').disabled = !i || !i.parent || !i.node.children.length;
   $('bUndo').disabled = !undo.length; $('bRedo').disabled = !redo.length;
@@ -241,7 +269,7 @@ function moveNode(id, targetId, mode, side) {
     let home = t.node;
     if (mode === 'into') { home.children.push(a.node); home.collapsed = false; }
     else { home = t.parent; home.children.splice(home.children.indexOf(t.node) + (mode === 'after' ? 1 : 0), 0, a.node); side = t.node.side || 'right'; }
-    if (home === map.root) { a.node.side = side; if (a.parent !== map.root) a.node.color = nextColor(); }
+    if (home === map.root) { a.node.side = side; if (a.node.color == null) a.node.color = nextColor(); }
     sel = id;
   });
 }
@@ -351,7 +379,7 @@ function nav(key) {
 }
 
 document.addEventListener('keydown', e => {
-  if (!map || $('drawer').classList.contains('open') || !$('dlg').hidden || e.target.matches('input,select')) { if (e.key === 'Escape') { closeDrawer(); todoist.close(); } return; }
+  if (!map || isHome() || $('drawer').classList.contains('open') || !$('dlg').hidden || !$('fmt').hidden || e.target.matches('input,select,textarea')) { if (e.key === 'Escape') { closeDrawer(); todoist.close(); format.close(); } return; }
   if (editing) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     else if (e.key === 'Escape') { e.preventDefault(); commitEdit(true); }
@@ -391,6 +419,8 @@ async function openMap(m) {
   for (const el of els.values()) el.remove();
   els.clear();
   store.setLast(m.id);
+  document.body.classList.remove('home');
+  if (location.hash !== '#m=' + m.id) history.pushState(null, '', '#m=' + m.id);
   render(); fit();
   todoist.refresh();
 }
@@ -407,27 +437,72 @@ function newMap() {
   store.save(m);
   return openMap(m);
 }
+/* ---------- Overzicht: alle mindmaps als kaarten ---------- */
+const isHome = () => document.body.classList.contains('home');
+const when = ts => new Date(ts).toLocaleString('nl-NL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+function miniSvg(m) {
+  const pal = PALETTES[m.theme?.palette] || PALETTES.kleurrijk;
+  const g = arrange(m.root, n => ({ w: clamp(n.text.length * 4 + 12, 20, 90), h: 12 }), 18, 5);
+  let a = 0, b = 0, c = 0, d = 0, lines = '', boxes = '';
+  for (const q of g.values()) { a = Math.min(a, q.x); b = Math.min(b, q.y); c = Math.max(c, q.x + q.w); d = Math.max(d, q.y + q.h); }
+  (function walk(n, parent, color) {
+    const p = g.get(n.id); if (!p) return;
+    const col = parent ? pal.c[color % pal.c.length] : pal.root;
+    if (parent) lines += `<path d="${edgePath(...edgeEnds(p, g.get(parent.id)))}" stroke="${col}"/>`;
+    boxes += `<rect x="${p.x}" y="${p.y}" width="${p.w}" height="${p.h}" rx="4" fill="${col}"${parent ? ' opacity=".75"' : ''}/>`;
+    for (const k of n.children) walk(k, n, k.color ?? (parent ? color : 0));
+  })(m.root, null, 0);
+  return `<svg viewBox="${a - 4} ${b - 4} ${c - a + 8} ${d - b + 8}"><g fill="none" stroke-width="1.5">${lines}</g>${boxes}</svg>`;
+}
 async function drawList() {
-  const ul = $('dList'); ul.textContent = '';
-  for (const m of await store.list()) {
-    const li = document.createElement('li'), o = document.createElement('button'), d = document.createElement('button');
-    o.className = 'open' + (m.id === map.id ? ' cur' : ''); o.textContent = m.title;
-    o.onclick = async () => { closeDrawer(); if (m.id !== map.id) { const x = await store.load(m.id); if (x) openMap(x); } };
-    d.className = 'del'; d.textContent = '✕'; d.title = 'Verwijderen';
-    d.onclick = async () => {
-      if (d.textContent === '✕') { d.textContent = 'Zeker?'; return; }
-      await store.remove(m.id);
-      if (m.id === map.id) { clearTimeout(saveTimer); map = null; const rest = await store.list(); const x = rest[0] && await store.load(rest[0].id); x ? await openMap(x) : await newMap(); }
+  const grid = $('pGrid'), q = $('pSearch').value.trim().toLowerCase(), cards = [];
+  const add = document.createElement('button');
+  add.className = 'card new'; add.textContent = '+ Nieuwe mindmap'; add.onclick = newMap; cards.push(add);
+  for (const it of await store.list()) {
+    if (q && !it.title.toLowerCase().includes(q)) continue;
+    const m = await store.load(it.id); if (!m) continue;
+    const card = document.createElement('article'), n = countAll(m.root);
+    card.className = 'card'; card.tabIndex = 0;
+    card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><button class="del" title="Verwijderen">✕</button>`;
+    card.querySelector('h3').textContent = m.title;
+    card.querySelector('p').textContent = `${n} ${n === 1 ? 'tak' : 'takken'} · ${when(m.updated)}`;
+    const go = async () => openMap(await store.load(it.id) || m), del = card.querySelector('.del');
+    card.onclick = e => { if (!e.target.closest('.del')) go(); };
+    card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) go(); };
+    del.onclick = async () => {
+      if (del.textContent === '✕') { del.textContent = 'Zeker?'; return; }
+      await store.remove(it.id);
+      if (map?.id === it.id) { clearTimeout(saveTimer); saveTimer = 0; map = null; }
       drawList();
     };
-    li.append(o, d); ul.append(li);
+    cards.push(card);
   }
+  grid.replaceChildren(...cards);
 }
-function openDrawer() { commitEdit(); flush(); drawList(); $('drawer').classList.add('open'); $('shade').hidden = false; }
+function showPortal() {
+  commitEdit(); flush();
+  document.body.classList.add('home'); document.title = 'Mijn mindmaps';
+  if (location.hash) history.pushState(null, '', location.pathname + location.search);
+  drawList();
+}
+async function route() {   // adres bepaalt wat je ziet: #m=<id> is een mindmap, anders het overzicht
+  const id = new URLSearchParams(location.hash.slice(1)).get('m');
+  if (!id) return showPortal();
+  if (map?.id === id && !isHome()) return;
+  const m = await store.load(id);
+  m ? openMap(m) : showPortal();
+}
+addEventListener('popstate', route);
+$('bHome').onclick = showPortal;
+$('pAcct').onclick = () => openDrawer();
+$('pSearch').oninput = drawList;
+$('lLook').value = getLook();
+$('lLook').onchange = e => { try { localStorage.setItem('mm:look', e.target.value); } catch {} setLook(e.target.value); };
+
+function openDrawer() { commitEdit(); flush(); $('drawer').classList.add('open'); $('shade').hidden = false; }
 function closeDrawer() { $('drawer').classList.remove('open'); $('shade').hidden = true; }
 $('bMenu').onclick = openDrawer;
-$('shade').onclick = () => { closeDrawer(); todoist.close(); };
-$('dNew').onclick = () => { closeDrawer(); newMap(); };
+$('shade').onclick = () => { closeDrawer(); todoist.close(); format.close(); };
 $('dExport').onclick = () => deliver(new Blob([JSON.stringify(map, null, 1)], { type: 'application/json' }), fileBase() + '.mindmap.json');
 
 /* ---------- Exporteren: afbeelding (PNG), PDF en tekst (Markdown). Altijd licht thema; ingeklapte takken blijven ingeklapt in beeld. ---------- */
@@ -459,28 +534,33 @@ function drawCanvas() {
   commitEdit();
   let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
   for (const g of geo.values()) { a = Math.min(a, g.x); b = Math.min(b, g.y); c = Math.max(c, g.x + g.w); d = Math.max(d, g.y + g.h); }
-  const M = 24, W = c - a + 2 * M, H = d - b + 2 * M, k = Math.min(2, Math.sqrt(12e6 / (W * H)));
+  const M = 24, W = c - a + 2 * M, H = d - b + 2 * M, k = Math.min(2, Math.sqrt(12e6 / (W * H))), th = theme();
   const cv = document.createElement('canvas'); cv.width = Math.ceil(W * k); cv.height = Math.ceil(H * k);
   const x = cv.getContext('2d'), FONT = 'px system-ui, -apple-system, "Segoe UI", sans-serif';
   x.scale(k, k); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.translate(M - a, M - b);
-  x.lineCap = 'round'; x.textBaseline = 'middle';
+  x.lineCap = x.lineJoin = 'round'; x.textBaseline = 'middle';
   for (const [id, p] of geo) {
     const i = info.get(id); if (!i.parent) continue;
-    const q = geo.get(i.parent.id), x1 = p.dir > 0 ? q.x + q.w : q.x, y1 = q.y + q.h / 2, x2 = p.dir > 0 ? p.x : p.x + p.w, y2 = p.y + p.h / 2, mx = (x1 + x2) / 2;
     x.lineWidth = 2; x.strokeStyle = COLORS[i.color % COLORS.length];
-    x.beginPath(); x.moveTo(x1, y1); x.bezierCurveTo(mx, y1, mx, y2, x2, y2); x.stroke();
+    x.stroke(new Path2D(edgePath(...edgeEnds(p, geo.get(i.parent.id)), th.edge)));
   }
   for (const [id, el] of els) {
-    const g = geo.get(id), i = info.get(id), t = i.node.task, cs = getComputedStyle(el);
+    const g = geo.get(id), i = info.get(id), n = i.node, t = n.task, cs = getComputedStyle(el), col = COLORS[i.color % COLORS.length];
     const bw = parseFloat(cs.borderTopWidth), fs = parseFloat(cs.fontSize), lh = fs * 1.35, done = t && t.done && !t.gone;
+    let ink = '#1c2330';
     x.beginPath(); x.roundRect(g.x + bw / 2, g.y + bw / 2, g.w - bw, g.h - bw, parseFloat(cs.borderTopLeftRadius));
-    x.fillStyle = i.depth ? '#fff' : '#2563eb'; x.fill();
-    x.lineWidth = bw; x.strokeStyle = i.depth ? COLORS[i.color % COLORS.length] : '#2563eb';
-    x.globalAlpha = i.depth > 1 ? 0.55 : 1; x.stroke();
+    x.lineWidth = bw;
+    if (!i.depth) { x.fillStyle = x.strokeStyle = th.pal.root; x.fill(); x.stroke(); ink = '#fff'; }
+    else if (th.style === 'minimaal' && i.depth > 1) { /* alleen tekst */ }
+    else {
+      x.fillStyle = '#fff'; x.fill(); x.strokeStyle = col;
+      if (th.style === 'gevuld') { x.fillStyle = col; x.globalAlpha = i.depth === 1 ? 1 : 0.18; x.fill(); if (i.depth === 1) ink = '#fff'; }
+      x.globalAlpha = i.depth > 1 ? 0.55 : 1; x.stroke();
+    }
     x.globalAlpha = done ? 0.6 : 1;
-    x.font = cs.fontWeight + ' ' + fs + FONT; x.fillStyle = i.depth ? '#1c2330' : '#fff';
+    x.font = cs.fontWeight + ' ' + fs + FONT; x.fillStyle = ink;
     const L = textLines(el), px = g.x + bw + parseFloat(cs.paddingLeft), py = g.y + bw + parseFloat(cs.paddingTop);
-    if (t) L[0] = (t.gone ? '⚠ ' : t.done ? '☑ ' : '☐ ') + L[0];
+    L[0] = pre(n) + L[0]; L[L.length - 1] += post(n);
     L.forEach((s, j) => { const y = py + (j + 0.5) * lh; x.fillText(s, px, y); if (done) x.fillRect(px, y, x.measureText(s).width, 1); });
     x.globalAlpha = 1;
     if (el.dataset.due) { x.font = '400 11' + FONT; x.fillStyle = '#667085'; x.fillText(el.dataset.due, px, py + L.length * lh + 7.5); }
@@ -514,11 +594,14 @@ function makePdf(cv) {   // één A4-pagina (liggend of staand) met de mindmap a
 }
 function outline() {
   let s = '# ' + map.title + '\n\n';
+  const flat = v => v.replace(/\s*\n\s*/g, ' ');
+  const label = c => (c.icon ? c.icon + ' ' : '') + (c.link ? '[' + flat(c.text) + '](' + c.link + ')' : flat(c.text));
   (function walk(n, depth) {
     for (const c of n.children) {
       const t = c.task && !c.task.gone ? c.task : null;
-      s += '  '.repeat(depth) + '- ' + (t ? (t.done ? '[x] ' : '[ ] ') : '') + c.text.replace(/\s*\n\s*/g, ' ')
+      s += '  '.repeat(depth) + '- ' + (t ? (t.done ? '[x] ' : '[ ] ') : '') + label(c)
         + (t?.due && !t.done ? ' (deadline ' + fmtDue(t.due) + ')' : '') + '\n';
+      if (c.note) s += '  '.repeat(depth + 1) + '> ' + flat(c.note) + '\n';
       walk(c, depth + 1);
     }
   })(map.root, 0);
@@ -542,6 +625,46 @@ $('dFile').onchange = async e => {
     await store.save(m); closeDrawer(); openMap(m);
   } catch { $('dImport').textContent = 'Geen geldige back-up'; setTimeout(() => $('dImport').textContent = 'Back-up terugzetten', 2500); }
 };
+
+/* ---------- Opmaak per tak (kleur, icoon, notitie, link) en thema per mindmap ---------- */
+const format = (() => {
+  const ICONS = ['⭐', '❗', '❓', '💡', '✅', '⛔', '🎯', '📅', '📌', '📎', '💬', '👤', '👥', '💶', '📈', '🚀', '❤️'];
+  let id = null;
+  const node = () => id && info.get(id)?.node;
+  const chip = (text, on, fn) => { const b = document.createElement('button'); b.type = 'button'; b.textContent = text; b.classList.toggle('on', on); b.onclick = fn; return b; };
+  function draw() {
+    const n = node(); if (!n) return;
+    const i = info.get(id), cur = i.color % COLORS.length;
+    if (!i.depth) $('fColors').textContent = 'De kleur van het midden hoort bij het kleurenschema hieronder.';
+    else $('fColors').replaceChildren(...COLORS.map((c, k) => {
+      const b = chip('', k === cur, () => { change(() => { n.color = k; }); draw(); });
+      b.style.background = c; b.title = 'Kleur ' + (k + 1); return b;
+    }));
+    $('fIcons').replaceChildren(chip('geen', !n.icon, () => { change(() => { delete n.icon; }); draw(); }),
+      ...ICONS.map(ic => chip(ic, n.icon === ic, () => { change(() => { n.icon = ic; }); draw(); })));
+  }
+  function open() {
+    commitEdit();
+    if (!sel || !info.get(sel)) { sel = map.root.id; render(); }
+    id = sel; const n = node(), t = map.theme || {};
+    $('fNote').value = n.note || ''; $('fLink').value = n.link || '';
+    $('fStyle').value = t.style || 'omlijnd'; $('fEdge').value = t.edge || 'boog'; $('fPal').value = t.palette || 'kleurrijk';
+    draw(); $('fmt').hidden = false; $('shade').hidden = false;
+  }
+  function close() {
+    if ($('fmt').hidden) return;
+    const n = node(), note = $('fNote').value.trim(); let link = $('fLink').value.trim();
+    if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
+    if (n && (note !== (n.note || '') || link !== (n.link || '')))
+      change(() => { if (note) n.note = note; else delete n.note; if (link) n.link = link; else delete n.link; });
+    $('fmt').hidden = true; $('shade').hidden = true; id = null;
+  }
+  const setTheme = () => { map.theme = { style: $('fStyle').value, edge: $('fEdge').value, palette: $('fPal').value }; touch(); render(); draw(); };
+  $('fStyle').onchange = $('fEdge').onchange = $('fPal').onchange = setTheme;
+  $('tFmt').onclick = open;
+  $('fmt').onsubmit = e => { e.preventDefault(); close(); };
+  return { close };
+})();
 
 /* ---------- Todoist. De koppeling (node.task) zit in de mindmap en synct mee; het token staat alleen op dit apparaat. ---------- */
 const fmtDue = d => new Date(d.length === 10 ? d + 'T00:00' : d).toLocaleDateString('nl-NL', { day: 'numeric', month: 'short' });
@@ -657,7 +780,7 @@ const cloud = (() => {
   };
   let user = null, busy = false, again = false, timer = 0;
   function set(s, msg) {
-    $('bSync').dataset.s = s; $('bSync').title = LABEL[s];
+    $('bSync').dataset.s = $('pAcct').dataset.s = s; $('bSync').title = LABEL[s];
     $('aStatus').textContent = msg || (user ? user.email + ' · ' : '') + LABEL[s];
     $('aForm').hidden = !sb || !!user; $('aOut').hidden = !user;
   }
@@ -679,8 +802,7 @@ const cloud = (() => {
     await store.remove(id, true);
     if (map?.id !== id) return;
     clearTimeout(saveTimer); saveTimer = 0; map = null;
-    const rest = await store.list(), x = rest[0] && await store.load(rest[0].id);
-    x ? await openMap(x) : await newMap();
+    showPortal();
   }
   async function sync() {
     if (!sb || !user) return;
@@ -701,13 +823,8 @@ const cloud = (() => {
       for (const [id, l] of local) if (!seen.has(id)) { const m = await store.load(id); if (m && !pristine(m)) await push(id); }
       for (const id in gone) if (!seen.has(id)) delete gone[id];
       store.setGone(gone);
-      // nieuw apparaat: lege startmindmap vervangen door de laatst bewerkte uit de cloud
-      if (map && pristine(map) && !editing) {
-        const o = (await store.list()).find(x => x.id !== map.id), old = map.id;
-        if (o) { await openMap(await store.load(o.id)); await store.remove(old, true); }
-      }
       set('ok');
-      if ($('drawer').classList.contains('open')) drawList();
+      if (isHome()) drawList();
     } catch (e) { console.warn('sync', e); set(navigator.onLine ? 'fout' : 'offline'); }
     busy = false;
     if (again) { again = false; kick(); }
@@ -740,8 +857,4 @@ addEventListener('pagehide', flush);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });
 addEventListener('resize', () => map && applyView());
 
-(async () => {
-  const last = store.getLast(), list = await store.list();
-  const m = (last && await store.load(last)) || (list[0] && await store.load(list[0].id));
-  m ? openMap(m) : newMap();
-})();
+route();
