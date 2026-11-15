@@ -35,7 +35,7 @@
 </aside>
 </div>
 
-<div id="peek" hidden><a id="peekLink" target="_blank" rel="noopener"></a><span id="peekNote"></span></div>
+<div id="peek" hidden><a id="peekLink" target="_blank" rel="noopener"></a><span id="peekNote"></span><span id="peekFiles"></span></div>
 <nav id="tools">
   <button id="tChild" title="Tab">+ Subtak</button>
   <button id="tSib" title="Enter">+ Tak ernaast</button>
@@ -115,6 +115,12 @@
       <div id="fStockOut"></div>
     </div>
     <p id="fImgMsg"></p>
+  </div>
+  <div class="grp">Bijlagen
+    <div id="fFiles"></div>
+    <div class="chips"><button type="button" id="fFilePick">Bestand toevoegen</button></div>
+    <input id="fFileIn" type="file" multiple hidden>
+    <p id="fFileMsg"></p>
   </div>
   <label>Notitie <textarea id="fNote" rows="3"></textarea></label>
   <label>Link <input id="fLink" inputmode="url" autocomplete="off" placeholder="https://…"></label>

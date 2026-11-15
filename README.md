@@ -60,6 +60,20 @@ Selecteer een tak en klik op "Opmaak".
 - **Link:** een webadres. De tak krijgt een 🔗 en de link verschijnt onderin beeld als je de tak selecteert.
 - **Voorbeeld van de link:** de knop onder het linkveld maakt een schermafbeelding van de website en zet die als miniatuur in de tak. Het webadres gaat daarvoor naar de externe dienst Microlink; dat gebeurt alleen als je op de knop klikt. De gratis dienst heeft een daglimiet, en pagina's achter een login geven hooguit het inlogscherm.
 
+## Bijlagen
+
+Aan elke tak kun je bestanden hangen van elk type: pdf, Word, Excel, PowerPoint, afbeeldingen enzovoort, tot 50 MB per bestand.
+
+| Wat | Hoe |
+|---|---|
+| Bijlage toevoegen | Opmaak → "Bestand toevoegen"; meerdere tegelijk kan |
+| Bijlage openen | Selecteer de tak en klik onderin op de bijlage, of open hem via Opmaak |
+| Bijlage verwijderen | Opmaak → ✕ achter de bijlage, daarna "Zeker?" |
+
+Een tak met bijlagen krijgt een 📎. Pdf's en afbeeldingen openen in een nieuw tabblad; andere bestanden worden gedownload.
+
+Bijlagen staan in je online opslag bij Supabase, niet op het apparaat. Je moet dus ingelogd en online zijn om ze toe te voegen of te openen. De gratis opslag is 1 GB. Verwijder je een tak of een hele mindmap, dan blijven de bijlagen daarvan in de opslag staan; opruimen kan in Supabase onder Storage → bijlagen.
+
 ## Stockfoto's
 
 Opmaak → "Stockfoto zoeken", typ een zoekwoord en tik op een foto. Engelse zoekwoorden geven vaak meer resultaat. De naam van de maker verschijnt als je met de muis op de afbeelding staat.
@@ -85,12 +99,12 @@ Zit een van de twee takken in een ingeklapt deel, dan is de pijl tijdelijk onzic
 
 Klik op "✨ Claude" voor het zijpaneel.
 
-- **Stel subtakken voor:** voorstellen bij de geselecteerde tak.
+- **Stel subtakken voor:** aanvullingen bij de geselecteerde tak.
 - **Wat ontbreekt?:** aanvullingen voor de hele mindmap.
-- **Verbeter de structuur:** advies over de opbouw.
-- **Eigen vraag:** typ hem onderin.
+- **Verbeter de structuur:** Claude verplaatst, hernoemt en voegt samen waar dat de opbouw duidelijker maakt.
+- **Eigen vraag of opdracht:** typ hem onderin, bijvoorbeeld "zet alles over kosten onder één tak".
 
-Voorstellen verschijnen als lijst met vinkjes. Met "Voeg geselecteerde toe" komen ze in de mindmap; met Ctrl+Z haal je ze weer weg.
+Claude kan takken toevoegen, hernoemen, verplaatsen, verwijderen en van een notitie voorzien. Hij voert niets zelf uit: de wijzigingen verschijnen als lijst met vinkjes, verwijderingen in rood. Met "Voer geselecteerde uit" gaan ze in één keer de mindmap in, en één keer ↶ of Ctrl+Z maakt alles weer ongedaan.
 
 Bij elke vraag gaat de volledige tekst van de mindmap, inclusief notities, naar Anthropic. Een grote mindmap kost daardoor meer per vraag.
 
@@ -165,10 +179,11 @@ Dit staat los van de synchronisatie en is bedoeld als extra kopie.
 |---|---|
 | Structuur en teksten | Kleuren en stijlen (de app kiest zelf een kleur per hoofdtak) |
 | Links en rechts van het midden | Afbeeldingen op volle grootte |
-| Notities, als platte tekst | Bijlagen zoals documenten |
+| Notities, als platte tekst | |
 | Weblinks | Taken en opmerkingen uit MindMeister |
 | De meest gebruikte iconen | Overige iconen |
 | Verbindingspijlen | |
+| Bijlagen (alleen uit een zip, en alleen als je bent ingelogd) | |
 | Afbeeldingen als miniatuur (alleen uit een zip) | |
 
 Een mindmap met meer dan 150 takken wordt vanaf het derde niveau ingeklapt geïmporteerd, zodat hij te overzien blijft. Het getal in het rondje toont hoeveel takken eronder zitten.

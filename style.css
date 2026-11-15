@@ -197,3 +197,9 @@ body.home .mapOnly { display: none !important; }
 .sug input { width: 20px; height: 20px; min-height: 0; margin: 1px 0 0; grid-row: span 2; }
 .sug small { color: var(--muted); }
 #aiForm { display: flex; gap: 8px; align-items: flex-end; }
+#fFiles { display: flex; flex-direction: column; gap: 6px; }
+#fFileMsg { margin: 0; font-size: 13px; color: var(--muted); }
+.grow { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
+#peekFiles { display: flex; gap: 6px; flex-wrap: wrap; }
+#peekFiles button { min-height: 30px; padding: 2px 8px; font-size: 13px; }
+.sug label.del span { color: var(--danger); }
