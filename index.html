@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Mindmap</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="top">
+  <button id="bMenu" title="Mijn mindmaps" aria-label="Mijn mindmaps">☰</button>
+  <h1 id="title"></h1>
+  <button id="bUndo" title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
+  <button id="bRedo" title="Opnieuw (Ctrl+Y)" aria-label="Opnieuw">↷</button>
+  <button id="bOut" title="Uitzoomen" aria-label="Uitzoomen">−</button>
+  <button id="bIn" title="Inzoomen" aria-label="Inzoomen">+</button>
+  <button id="bFit" title="Passend maken" aria-label="Passend maken">⤢</button>
+</header>
+
+<main id="canvas"><div id="world"><svg id="edges" width="1" height="1"></svg></div></main>
+
+<nav id="tools">
+  <button id="tChild" title="Tab">+ Subtak</button>
+  <button id="tSib" title="Enter">+ Tak ernaast</button>
+  <button id="tEdit" title="F2 of dubbelklik">Bewerk</button>
+  <button id="tFold" title="Spatie">Klap in/uit</button>
+  <button id="tDel" title="Delete">Verwijder</button>
+</nav>
+
+<div id="shade" hidden></div>
+<aside id="drawer" aria-label="Mijn mindmaps">
+  <h2>Mijn mindmaps</h2>
+  <button id="dNew" class="primary">+ Nieuwe mindmap</button>
+  <ul id="dList"></ul>
+  <div class="foot">
+    <button id="dExport">Back-up opslaan</button>
+    <button id="dImport">Back-up openen</button>
+    <input id="dFile" type="file" accept=".json,application/json" hidden>
+  </div>
+</aside>
+<div id="ghost" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>
