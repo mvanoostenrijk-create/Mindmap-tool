@@ -165,3 +165,35 @@ body.home .mapOnly { display: none !important; }
 .card .del { position: absolute; right: 8px; bottom: 8px; min-height: 32px; padding: 4px 8px; color: var(--danger); }
 #pMsg { margin: -6px 0 12px; font-size: 13px; color: var(--muted); }
 #pMsg:empty { display: none; }
+
+/* Verbindingen, afbeeldingen, sleutels, Claude */
+#edges .lk { stroke: var(--muted); stroke-dasharray: 6 5; }
+#edges .lkh { fill: var(--muted); stroke: none; }
+#edges .lk.on { stroke: var(--accent); stroke-width: 3; }
+#edges .lkh.on { fill: var(--accent); }
+#edges .lkhit { stroke: transparent; stroke-width: 18; pointer-events: stroke; cursor: pointer; }
+.node { display: flex; flex-direction: column; }
+.node img { order: -1; align-self: center; margin-bottom: 6px; border-radius: 6px; pointer-events: none; }
+#drawer { overflow-y: auto; }
+#keys { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 12px; }
+.key { display: flex; flex-direction: column; gap: 8px; }
+.key p, #fImgMsg { margin: 0; font-size: 13px; color: var(--muted); }
+.key form, .pair { display: flex; gap: 8px; }
+#fStockOut { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; margin-top: 8px; }
+#fStockOut button { padding: 0; min-height: 0; overflow: hidden; }
+#fStockOut img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+#stage { flex: 1; min-height: 0; display: flex; }
+#ai { flex: none; width: min(380px, 94vw); display: flex; flex-direction: column; gap: 10px; padding: 16px;
+  background: var(--surface); border-left: 1px solid var(--line); }
+.aiHead { display: flex; align-items: center; }
+.aiHead h2 { flex: 1; margin: 0; font-size: 17px; }
+#aiLog { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; font-size: 14px; }
+#aiLog p { margin: 0; white-space: pre-wrap; }
+#aiLog .q { font-weight: 600; margin-top: 8px; }
+#aiLog .wait { color: var(--muted); }
+#aiLog .err { color: var(--danger); }
+.sug { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--line); border-radius: 10px; }
+.sug label { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: start; }
+.sug input { width: 20px; height: 20px; min-height: 0; margin: 1px 0 0; grid-row: span 2; }
+.sug small { color: var(--muted); }
+#aiForm { display: flex; gap: 8px; align-items: flex-end; }

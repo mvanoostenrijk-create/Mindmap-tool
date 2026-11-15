@@ -76,6 +76,7 @@ const HG = 52, VG = 12;
 let map = null, sel = null, editing = null, editOrig = '';
 let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
+let selLink = null, linking = null;   // geselecteerde verbinding; tak van waaruit een verbinding wordt getrokken
 const els = new Map(), geo = new Map();
 let info = new Map();
 let uidN = 0;
@@ -90,6 +91,7 @@ function index() {
     for (const c of n.children)
       walk(c, n, depth + 1, depth ? side : (c.side || 'right'), c.color ?? (depth ? color : 0), visible && (!n.collapsed || !depth));
   })(map.root, null, 0, null, 0, true);
+  if (map.links) map.links = map.links.filter(l => info.has(l.a) && info.has(l.b));
 }
 function touch() {
   map.updated = Date.now();
@@ -98,13 +100,14 @@ function touch() {
   saveTimer = setTimeout(flush, 300);
 }
 function flush() { clearTimeout(saveTimer); saveTimer = 0; if (map) { store.keep(map); store.save(map); } }
-function snap() { undo.push(JSON.stringify(map.root)); if (undo.length > 100) undo.shift(); redo = []; }
+const snapshot = () => JSON.stringify({ root: map.root, links: map.links || [] });
+function snap() { undo.push(snapshot()); if (undo.length > 100) undo.shift(); redo = []; }
 function change(fn) { snap(); fn(); touch(); render(); }
 function timeTravel(from, to) {
   if (!from.length) return;
   commitEdit();
-  to.push(JSON.stringify(map.root));
-  map.root = JSON.parse(from.pop());
+  to.push(snapshot());
+  Object.assign(map, JSON.parse(from.pop()));
   index();
   if (!info.has(sel)) sel = map.root.id;
   touch(); render();
@@ -135,6 +138,13 @@ function render() {
     const txt = el.firstChild, tog = el.lastChild, a = pre(n), z = post(n);
     if (a) txt.dataset.pre = a; else delete txt.dataset.pre;
     if (z) txt.dataset.post = z; else delete txt.dataset.post;
+    let im = el.querySelector('img');
+    if (n.img) {
+      if (!im) { im = document.createElement('img'); im.draggable = false; el.insertBefore(im, tog); }
+      if (im.getAttribute('src') !== n.img.src) im.src = n.img.src;
+      const k = Math.min(1, 140 / n.img.w); im.width = Math.round(n.img.w * k); im.height = Math.round(n.img.h * k);   // vaste maat: indeling klopt meteen
+      im.title = n.img.by || '';
+    } else if (im) im.remove();
     if (id !== editing && txt.textContent !== n.text) txt.textContent = n.text;
     tog.hidden = !i.depth || !n.children.length;
     tog.textContent = n.collapsed ? countAll(n) : '−';
@@ -168,6 +178,17 @@ function edgePath(x1, y1, x2, y2, kind) {
 }
 const edgeEnds = (p, q) => [p.dir > 0 ? q.x + q.w : q.x, q.y + q.h / 2, p.dir > 0 ? p.x : p.x + p.w, p.y + p.h / 2];
 
+// Verbinding tussen twee takken: gestippelde boog met pijlpunt. Geeft [lijn, pijlpunt] als SVG-paden (ook gebruikt in de export).
+function linkShape(A, B) {
+  const ax = A.x + A.w / 2, ay = A.y + A.h / 2, bx = B.x + B.w / 2, by = B.y + B.h / 2;
+  const len = Math.hypot(bx - ax, by - ay) || 1, bend = Math.min(60, len * 0.2);
+  const mx = (ax + bx) / 2 - (by - ay) / len * bend, my = (ay + by) / 2 + (bx - ax) / len * bend;
+  const edge = (r, cx, cy) => { const dx = mx - cx, dy = my - cy, k = Math.min(Math.abs((r.w / 2 + 4) / (dx || 1e-6)), Math.abs((r.h / 2 + 4) / (dy || 1e-6)), 1); return [cx + dx * k, cy + dy * k]; };
+  const [sx, sy] = edge(A, ax, ay), [ex, ey] = edge(B, bx, by), ang = Math.atan2(ey - my, ex - mx);
+  const p = o => `${(ex - 10 * Math.cos(ang + o)).toFixed(1)} ${(ey - 10 * Math.sin(ang + o)).toFixed(1)}`;
+  const f = v => v.toFixed(1);
+  return [`M${f(sx)} ${f(sy)}Q${f(mx)} ${f(my)} ${f(ex)} ${f(ey)}`, `M${f(ex)} ${f(ey)}L${p(0.45)}L${p(-0.45)}Z`];
+}
 function layout() {
   geo.clear();
   for (const [k, v] of arrange(map.root, n => { const el = els.get(n.id); return { w: el.offsetWidth, h: el.offsetHeight }; }, HG, VG)) geo.set(k, v);
@@ -178,11 +199,16 @@ function layout() {
     el.style.left = p.x + 'px'; el.style.top = p.y + 'px';
     if (i.parent) d += `<path d="${edgePath(...edgeEnds(p, geo.get(i.parent.id)), kind)}" stroke="${COLORS[i.color % COLORS.length]}"/>`;
   }
+  for (const l of map.links || []) {
+    const A = geo.get(l.a), B = geo.get(l.b); if (!A || !B) continue;   // een eind zit in een ingeklapte tak
+    const [line, head] = linkShape(A, B), on = l.id === selLink ? ' on' : '';
+    d += `<path class="lk${on}" d="${line}"/><path class="lkh${on}" d="${head}"/><path class="lkhit" data-link="${l.id}" d="${line}"/>`;
+  }
   edges.innerHTML = d;
   // De SVG krijgt de echte afmetingen van de mindmap; Safari laat anders sporen achter bij het schuiven.
   let a = 0, b = 0, c = 0, e = 0;
   for (const q of geo.values()) { a = Math.min(a, q.x); b = Math.min(b, q.y); c = Math.max(c, q.x + q.w); e = Math.max(e, q.y + q.h); }
-  a -= 8; b -= 8; const w = c - a + 8, h = e - b + 8;
+  a -= 70; b -= 70; const w = c - a + 70, h = e - b + 70;
   edges.setAttribute('viewBox', `${a} ${b} ${w} ${h}`);
   Object.assign(edges.style, { left: a + 'px', top: b + 'px', width: w + 'px', height: h + 'px' });
   applyView();
@@ -195,10 +221,13 @@ function ui() {
   const i = sel && info.get(sel);
   $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
   const n = i && i.node;
-  $('peek').hidden = !(n && (n.note || n.link));
-  $('peekLink').hidden = !(n && n.link); $('peekNote').textContent = n && n.note || '';
+  $('peek').hidden = !(linking || n && (n.note || n.link));
+  $('peekLink').hidden = !!linking || !(n && n.link);
+  $('peekNote').textContent = linking ? 'Tik op de tak waarmee je wilt verbinden. Esc of een tik op de achtergrond annuleert.' : n && n.note || '';
   if (n && n.link) { $('peekLink').href = n.link; $('peekLink').textContent = '🔗 ' + n.link.replace(/^https?:\/\//, '').slice(0, 40); }
   $('tSib').disabled = $('tDel').disabled = !i || !i.parent;
+  if (selLink) $('tDel').disabled = false;
+  $('tLink').disabled = !i; $('tLink').textContent = linking ? 'Kies doel…' : 'Verbind';
   $('tFold').disabled = !i || !i.parent || !i.node.children.length;
   $('bUndo').disabled = !undo.length; $('bRedo').disabled = !redo.length;
 }
@@ -227,7 +256,7 @@ function ensureVisible(id) {
   if (t < m) view.y += m - t; else if (b > Hh - m) view.y -= b - (Hh - m);
   applyView();
 }
-function select(id) { if (sel === id) return; sel = id; render(); if (id) ensureVisible(id); }
+function select(id) { if (sel === id && !selLink && !linking) return; selLink = linking = null; sel = id; render(); if (id) ensureVisible(id); }
 
 /* ---------- Bewerken ---------- */
 function startEdit(id, all = true) {
@@ -278,6 +307,7 @@ function addSibling() {
 }
 function removeSel() {
   commitEdit();
+  if (selLink) { change(() => { map.links = map.links.filter(l => l.id !== selLink); selLink = null; }); return; }
   const i = sel && info.get(sel);
   if (!i?.parent) return;
   const arr = i.parent.children, k = arr.indexOf(i.node);
@@ -310,11 +340,19 @@ canvas.addEventListener('pointerdown', e => {
   const nodeEl = e.target.closest('.node');
   if (editing) { if (nodeEl?.dataset.id === editing) return; commitEdit(); }
   if (e.target.closest('.tog')) return;
+  const hit = e.target.closest('[data-link]');
+  if (hit) { linking = null; sel = null; selLink = hit.dataset.link; render(); return; }
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.setPointerCapture(e.pointerId);
   if (pts.size === 2) { endDrag(); world.classList.add('moving'); g = { type: 'pinch', ...pinchState() }; return; }
   if (pts.size > 2) return;
   const id = nodeEl?.dataset.id;
+  if (id && linking) {
+    const a = linking; linking = null;
+    if (a !== id && info.has(a) && !(map.links || []).some(l => l.a === a && l.b === id)) change(() => { (map.links ||= []).push({ id: uid(), a, b: id }); });
+    else render();
+    return;
+  }
   if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
   else g = { type: 'pan', x0: e.clientX, y0: e.clientY, vx: view.x, vy: view.y, moved: false };
 });
@@ -417,6 +455,8 @@ document.addEventListener('keydown', e => {
   if (mod && k.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? timeTravel(redo, undo) : timeTravel(undo, redo); }
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); return timeTravel(redo, undo); }
   if (mod || e.altKey) return;
+  if (k === 'Escape' && (linking || selLink)) { linking = selLink = null; render(); return; }
+  if (selLink && (k === 'Delete' || k === 'Backspace')) { e.preventDefault(); return removeSel(); }
   if (!sel) { if (k.startsWith('Arrow') || k === 'Tab') { e.preventDefault(); select(map.root.id); } return; }
   if (k === 'Tab' || k === 'Insert') { e.preventDefault(); addChild(); }
   else if (k === 'Enter') { e.preventDefault(); addSibling(); }
@@ -433,6 +473,7 @@ $('tSib').onclick = addSibling;
 $('tEdit').onclick = () => sel && startEdit(sel, false);
 $('tFold').onclick = () => toggle();
 $('tDel').onclick = removeSel;
+$('tLink').onclick = () => { commitEdit(); if (!sel) return; linking = linking ? null : sel; selLink = null; render(); };
 $('bUndo').onclick = () => timeTravel(undo, redo);
 $('bRedo').onclick = () => timeTravel(redo, undo);
 $('bIn').onclick = () => zoomCenter(1.25);
@@ -447,6 +488,7 @@ async function openMap(m) {
   els.clear();
   store.setLast(m.id);
   document.body.classList.remove('home');
+  selLink = linking = null;
   if (location.hash !== '#m=' + m.id) history.pushState(null, '', '#m=' + m.id);
   render(); fit();
   todoist.refresh();
@@ -521,16 +563,21 @@ function parseFreemind(xml) {
   const doc = new DOMParser().parseFromString(xml, 'text/xml'), top = doc.querySelector('map > node');
   if (!top || doc.querySelector('parsererror')) throw new Error('geen FreeMind-bestand');
   let count = 0, branch = 0;
+  const idOf = new Map(), arrows = [], imgs = [];
   const conv = (el, depth) => {
     count++;
     const n = { id: uid(), text: el.getAttribute('TEXT') || '', children: [] }, kids = [...el.children];
     const icon = kids.map(k => k.tagName === 'icon' && FM_ICONS[k.getAttribute('BUILTIN')]).find(Boolean), link = el.getAttribute('LINK') || '';
+    idOf.set(el.getAttribute('ID'), n.id);
     if (icon) n.icon = icon;
     if (/^https?:\/\//i.test(link) && !/mindmeister\.com\/assets/i.test(link)) n.link = link;
-    for (const k of kids) if (k.tagName === 'rc') {
-      let t = htmlToText(rich[k.getAttribute('i')]);
+    for (const k of kids) {
+      if (k.tagName === 'arrowlink') arrows.push([n.id, k.getAttribute('DESTINATION')]);
+      if (k.tagName !== 'rc') continue;
+      const raw = rich[k.getAttribute('i')], pic = /<img[^>]*\bsrc=(?:"([^"]+)"|'([^']+)'|([^\s>]+))/i.exec(raw);
+      let t = htmlToText(raw);
       if (/<\w+[^>]*>/.test(t)) t = htmlToText(t);
-      if (k.getAttribute('t') === 'NOTE') { if (t) n.note = t; } else if (!n.text) n.text = t;
+      if (k.getAttribute('t') === 'NOTE') { if (t) n.note = t; } else { if (!n.text) n.text = t; if (pic) imgs.push([n, pic[1] || pic[2] || pic[3]]); }
     }
     if (el.getAttribute('FOLDED') === 'true') n.collapsed = true;
     if (depth === 1) { n.side = el.getAttribute('POSITION') === 'left' ? 'left' : 'right'; n.color = branch++; }
@@ -540,9 +587,9 @@ function parseFreemind(xml) {
   const root = conv(top, 0);
   // Grote mindmap: alles vanaf het derde niveau ingeklapt, anders is hij niet te overzien
   if (count > 150) (function fold(n, d) { for (const c of n.children) { if (d >= 1 && c.children.length) c.collapsed = true; fold(c, d + 1); } })(root, 0);
-  return root;
+  return { root, imgs, links: arrows.filter(([, to]) => idOf.has(to)).map(([a, to]) => ({ id: uid(), a, b: idOf.get(to) })) };
 }
-async function unzip(buf, want) {
+async function unzip(buf, want) {   // geeft [{name, bytes}] voor de bestanden waarvoor want(name) waar is
   const v = new DataView(buf), u8 = new Uint8Array(buf), out = [];
   let e = buf.byteLength - 22;
   while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
@@ -559,12 +606,25 @@ async function unzip(buf, want) {
     const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nl));
     if (want(name)) {
       const at = off + 30 + v.getUint16(off + 26, true) + v.getUint16(off + 28, true), raw = u8.subarray(at, at + size);
-      const bytes = method === 0 ? raw : await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
-      out.push({ name, text: new TextDecoder().decode(bytes) });
+      out.push({ name, bytes: method === 0 ? raw : new Uint8Array(await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer()) });
     }
     p += 46 + nl + xl + v.getUint16(p + 32, true);
   }
   return out;
+}
+// Afbeelding verkleinen tot een miniatuur die in de mindmap zelf wordt bewaard
+function shrink(blob, max = 320) {
+  return new Promise((res, rej) => {
+    const im = new Image(), u = URL.createObjectURL(blob);
+    im.onload = () => {
+      const k = Math.min(1, max / Math.max(im.width, im.height)), w = Math.round(im.width * k), h = Math.round(im.height * k);
+      const c = document.createElement('canvas'), x = c.getContext('2d');
+      c.width = w; c.height = h; x.fillStyle = '#fff'; x.fillRect(0, 0, w, h); x.drawImage(im, 0, 0, w, h);
+      URL.revokeObjectURL(u); res({ src: c.toDataURL('image/jpeg', 0.82), w, h });
+    };
+    im.onerror = () => { URL.revokeObjectURL(u); rej(new Error('geen afbeelding')); };
+    im.src = u;
+  });
 }
 async function importFiles(files) {
   let ok = 0; const bad = [];
@@ -572,12 +632,18 @@ async function importFiles(files) {
   for (const f of files) {
     try {
       const buf = await f.arrayBuffer(), zipped = buf.byteLength > 4 && new DataView(buf).getUint32(0, true) === 0x04034b50;
-      const docs = zipped ? await unzip(buf, n => /\.mm$/i.test(n)) : [{ text: new TextDecoder().decode(buf) }];
+      const docs = zipped ? await unzip(buf, n => /\.mm$/i.test(n)) : [{ bytes: buf }];
       if (!docs.length) throw new Error('geen mindmap in zip');
       for (const d of docs) {
-        let m;
-        if (/^\s*\{/.test(d.text)) { m = JSON.parse(d.text); if (!m.root?.id || !Array.isArray(m.root.children)) throw new Error('geen back-up'); }
-        else m = { root: parseFreemind(d.text) };
+        const text = new TextDecoder().decode(d.bytes); let m;
+        if (/^\s*\{/.test(text)) { m = JSON.parse(text); if (!m.root?.id || !Array.isArray(m.root.children)) throw new Error('geen back-up'); }
+        else {
+          const fm = parseFreemind(text); m = { root: fm.root, links: fm.links };
+          if (zipped && fm.imgs.length) {
+            const names = new Set(fm.imgs.map(x => x[1])), pics = new Map((await unzip(buf, n => names.has(n))).map(x => [x.name, x.bytes]));
+            for (const [n, name] of fm.imgs) if (pics.has(name)) try { n.img = await shrink(new Blob([pics.get(name)])); } catch {}
+          }
+        }
         m.id = uid(); m.title = m.root.text.trim() || 'Naamloos'; m.updated = Date.now();
         await store.save(m); ok++;
       }
@@ -645,7 +711,7 @@ function drawCanvas() {
   commitEdit();
   let a = Infinity, b = Infinity, c = -Infinity, d = -Infinity;
   for (const g of geo.values()) { a = Math.min(a, g.x); b = Math.min(b, g.y); c = Math.max(c, g.x + g.w); d = Math.max(d, g.y + g.h); }
-  const M = 24, W = c - a + 2 * M, H = d - b + 2 * M, k = Math.min(2, Math.sqrt(12e6 / (W * H))), th = theme();
+  const M = 40, W = c - a + 2 * M, H = d - b + 2 * M, k = Math.min(2, Math.sqrt(12e6 / (W * H))), th = theme();
   const cv = document.createElement('canvas'); cv.width = Math.ceil(W * k); cv.height = Math.ceil(H * k);
   const x = cv.getContext('2d'), FONT = 'px system-ui, -apple-system, "Segoe UI", sans-serif';
   x.scale(k, k); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.translate(M - a, M - b);
@@ -654,6 +720,12 @@ function drawCanvas() {
     const i = info.get(id); if (!i.parent) continue;
     x.lineWidth = 2; x.strokeStyle = COLORS[i.color % COLORS.length];
     x.stroke(new Path2D(edgePath(...edgeEnds(p, geo.get(i.parent.id)), th.edge)));
+  }
+  for (const l of map.links || []) {
+    const A = geo.get(l.a), B = geo.get(l.b); if (!A || !B) continue;
+    const [line, head] = linkShape(A, B);
+    x.lineWidth = 2; x.strokeStyle = x.fillStyle = '#667085';
+    x.setLineDash([6, 5]); x.stroke(new Path2D(line)); x.setLineDash([]); x.fill(new Path2D(head));
   }
   for (const [id, el] of els) {
     const g = geo.get(id), i = info.get(id), n = i.node, t = n.task, cs = getComputedStyle(el), col = COLORS[i.color % COLORS.length];
@@ -670,7 +742,8 @@ function drawCanvas() {
     }
     x.globalAlpha = done ? 0.6 : 1;
     x.font = cs.fontWeight + ' ' + fs + FONT; x.fillStyle = ink;
-    const L = textLines(el), px = g.x + bw + parseFloat(cs.paddingLeft), py = g.y + bw + parseFloat(cs.paddingTop);
+    const txt = el.firstChild, im = el.querySelector('img'), L = textLines(el), px = g.x + bw + txt.offsetLeft, py = g.y + bw + txt.offsetTop;
+    if (im && im.complete && im.naturalWidth) x.drawImage(im, g.x + bw + im.offsetLeft, g.y + bw + im.offsetTop, im.offsetWidth, im.offsetHeight);
     L[0] = pre(n) + L[0]; L[L.length - 1] += post(n);
     L.forEach((s, j) => { const y = py + (j + 0.5) * lh; x.fillText(s, px, y); if (done) x.fillRect(px, y, x.measureText(s).width, 1); });
     x.globalAlpha = 1;
@@ -760,7 +833,7 @@ const format = (() => {
     id = sel; const n = node(), t = map.theme || {};
     $('fNote').value = n.note || ''; $('fLink').value = n.link || '';
     $('fStyle').value = t.style || 'omlijnd'; $('fEdge').value = t.edge || 'boog'; $('fPal').value = t.palette || 'kleurrijk';
-    draw(); $('fmt').hidden = false; $('shade').hidden = false;
+    draw(); media.reset(); $('fmt').hidden = false; $('shade').hidden = false;
   }
   function close() {
     if ($('fmt').hidden) return;
@@ -774,7 +847,170 @@ const format = (() => {
   $('fStyle').onchange = $('fEdge').onchange = $('fPal').onchange = setTheme;
   $('tFmt').onclick = open;
   $('fmt').onsubmit = e => { e.preventDefault(); close(); };
-  return { close };
+  return { close, node, draw };
+})();
+
+/* ---------- Sleutels voor koppelingen (per apparaat, in localStorage) ---------- */
+const keys = (() => {
+  const get = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
+  const put = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} };
+  const DEFS = [
+    ['mm:pexels', 'Pexels-sleutel', 'Stockfoto\'s: gratis sleutel via pexels.com/api.', 'Pexels is gekoppeld op dit apparaat.'],
+    ['mm:claude', 'Claude API-sleutel', 'Claude: sleutel via console.anthropic.com. Gebruik kost apart geld en bij elke vraag gaat de inhoud van de mindmap naar Anthropic.', 'Claude is gekoppeld op dit apparaat.']
+  ];
+  for (const [k, label, off, on] of DEFS) {
+    const box = document.createElement('div'); box.className = 'key';
+    box.innerHTML = '<p></p><form><input type="password" autocomplete="off" required><button>Bewaar</button></form><button type="button">Sleutel verwijderen</button>';
+    const [p, form, del] = box.children, input = form.firstChild;
+    input.placeholder = label; input.setAttribute('aria-label', label);
+    const draw = () => { const has = !!get(k); p.textContent = has ? on : off; form.hidden = has; del.hidden = !has; };
+    form.onsubmit = e => { e.preventDefault(); put(k, input.value.trim()); input.value = ''; draw(); };
+    del.onclick = () => { put(k, ''); draw(); };
+    draw(); $('keys').append(box);
+  }
+  return { get };
+})();
+
+/* ---------- Afbeelding in een tak: eigen bestand of stockfoto van Pexels (onderdeel van het opmaak-venster) ---------- */
+const media = (() => {
+  const msg = t => { $('fImgMsg').textContent = t || ''; };
+  const set = img => { const n = format.node(); if (!n) return; change(() => { if (img) n.img = img; else delete n.img; }); format.draw(); };
+  function reset() { msg(''); $('fStock').hidden = true; $('fStockOut').textContent = ''; }
+  $('fImgPick').onclick = () => $('fImgFile').click();
+  $('fImgFile').onchange = async e => {
+    const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+    try { set(await shrink(f)); msg(''); } catch { msg('Dit bestand is geen afbeelding die ik kan lezen.'); }
+  };
+  $('fImgDel').onclick = () => { set(null); msg(''); };
+  $('fImgStock').onclick = () => {
+    if (!keys.get('mm:pexels')) return msg('Vul eerst je Pexels-sleutel in onder ☰ (instellingen).');
+    $('fStock').hidden = false; $('fStockQ').value ||= (format.node()?.text || '').slice(0, 40); $('fStockQ').focus();
+  };
+  async function search() {
+    const q = $('fStockQ').value.trim(); if (!q) return;
+    msg('Zoeken…'); $('fStockOut').textContent = '';
+    try {
+      const r = await fetch('https://api.pexels.com/v1/search?per_page=12&locale=nl-NL&query=' + encodeURIComponent(q), { headers: { Authorization: keys.get('mm:pexels') } });
+      if (!r.ok) throw Object.assign(new Error(), { status: r.status });
+      const photos = (await r.json()).photos || [];
+      msg(photos.length ? 'Tik op een foto om hem te gebruiken.' : 'Niets gevonden. Probeer een ander zoekwoord, eventueel in het Engels.');
+      $('fStockOut').replaceChildren(...photos.map(ph => {
+        const b = document.createElement('button'), im = document.createElement('img');
+        b.type = 'button'; b.title = 'Foto: ' + ph.photographer; im.src = ph.src.tiny; im.alt = ph.alt || q; im.loading = 'lazy'; b.append(im);
+        b.onclick = async () => {
+          msg('Foto ophalen…');
+          try { const img = await shrink(await (await fetch(ph.src.medium)).blob()); img.by = 'Foto: ' + ph.photographer + ' (Pexels)'; set(img); reset(); }
+          catch { msg('Deze foto kon niet worden opgehaald.'); }
+        };
+        return b;
+      }));
+    } catch (e) { msg(e.status === 401 || e.status === 403 ? 'Pexels weigert de sleutel. Controleer hem onder ☰.' : e.status === 429 ? 'De limiet van Pexels is bereikt. Probeer het over een uur opnieuw.' : 'Pexels is niet bereikbaar.'); }
+  }
+  $('fStockGo').onclick = search;
+  $('fStockQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); search(); } };
+  return { reset };
+})();
+
+/* ---------- Claude denkt mee. Rechtstreeks vanuit de browser naar de Claude API met de eigen sleutel van de gebruiker. ---------- */
+const claude = (() => {
+  const turns = [];   // {q, a} van dit gesprek; elke aanvraag is één losstaand bericht met de actuele mindmap erin
+  let busy = false;
+  const SCHEMA = {
+    type: 'object', additionalProperties: false, required: ['reply', 'suggestions'],
+    properties: {
+      reply: { type: 'string' },
+      suggestions: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['id', 'parent', 'text'],
+        properties: { id: { type: 'string' }, parent: { type: 'string' }, text: { type: 'string' } } } }
+    }
+  };
+  const SYSTEM = `Je denkt mee met iemand die een mindmap opbouwt in een eigen mindmap-app. Je krijgt de mindmap als ingesprongen lijst; elke tak begint met een id tussen blokhaken, zoals [n12].
+
+De gebruiker leest je antwoord in een smal zijpaneel naast de mindmap. Houd "reply" daarom kort: een paar zinnen in gewoon Nederlands, zonder Markdown-opmaak.
+
+Concrete nieuwe takken zet je niet in de tekst maar in "suggestions"; de gebruiker voegt ze met één klik toe. Elke suggestie heeft een eigen id (s1, s2, ...), een "parent" en een "text". "parent" is het id van een bestaande tak, of het id van een eerdere suggestie als je een nieuwe tak met subtakken voorstelt. Schrijf "text" in de stijl van de bestaande takken: kort, meestal een paar woorden. Stel niets voor wat er al staat. Vraagt de gebruiker niet om nieuwe takken, laat "suggestions" dan leeg.`;
+
+  function outline() {
+    const ids = new Map(); let text = '', k = 0, picked = '';
+    (function walk(n, depth) {
+      const id = 'n' + k++; ids.set(id, n.id);
+      text += '  '.repeat(depth) + `- [${id}] ${n.text.replace(/\s*\n\s*/g, ' ')}` + (n.note ? ` (notitie: ${n.note.replace(/\s*\n\s*/g, ' ')})` : '') + '\n';
+      if (n.id === sel) picked = `[${id}] ${n.text}`;
+      n.children.forEach(c => walk(c, depth + 1));
+    })(map.root, 0);
+    return { ids, text, picked };
+  }
+  async function call(content) {
+    const r = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json', 'x-api-key': keys.get('mm:claude'), 'anthropic-version': '2026-10-21',
+        'anthropic-beta': 'server-side-fallback-2026-07-01', 'anthropic-dangerous-direct-browser-access': 'true'
+      },
+      body: JSON.stringify({
+        model: 'claude-opus-5-5', max_tokens: 16000, system: SYSTEM, fallbacks: 'default',
+        output_config: { effort: 'medium', format: { type: 'json_schema', schema: SCHEMA } },
+        messages: [{ role: 'user', content }]
+      })
+    });
+    const d = await r.json().catch(() => null);
+    if (!r.ok) throw Object.assign(new Error(d?.error?.message || ''), { status: r.status });
+    if (d.stop_reason === 'refusal') throw new Error('Claude heeft deze vraag niet beantwoord.');
+    if (d.stop_reason === 'max_tokens') throw new Error('Het antwoord werd te lang. Stel een gerichtere vraag.');
+    return JSON.parse(d.content.find(b => b.type === 'text').text);
+  }
+  const explain = e => e.status === 401 ? 'De Claude-sleutel klopt niet. Controleer hem onder ☰.'
+    : e.status === 429 || e.status === 529 ? 'Claude is nu te druk. Probeer het zo opnieuw.'
+    : e.status ? 'Claude gaf een fout (' + e.status + ')' + (e.message ? ': ' + e.message : '.')
+    : e.message && !(e instanceof TypeError) && !(e instanceof SyntaxError) ? e.message : 'Claude is niet bereikbaar. Controleer je internetverbinding.';
+
+  const el = (tag, cls, text) => { const x = document.createElement(tag); if (cls) x.className = cls; if (text) x.textContent = text; return x; };
+  function addPicked(list, ids) {
+    const made = new Map(); let n = 0;
+    change(() => {
+      for (const s of list) {
+        const p = made.get(s.parent) || info.get(ids.get(s.parent))?.node; if (!p) continue;
+        const c = { id: uid(), text: s.text, children: [] };
+        if (p === map.root) { const left = p.children.filter(x => x.side === 'left').length; c.side = left < p.children.length - left ? 'left' : 'right'; c.color = nextColor(); }
+        p.children.push(c); p.collapsed = false; made.set(s.id, c); n++;
+      }
+    });
+    return n;
+  }
+  async function ask(q) {
+    q = q.trim();
+    if (!q || busy || !map) return;
+    if (!keys.get('mm:claude')) { $('aiLog').append(el('p', 'err', 'Vul eerst je Claude API-sleutel in onder ☰ (instellingen).')); return; }
+    busy = true; $('aiQ').value = '';
+    const o = outline(), log = $('aiLog'), wait = el('p', 'wait', 'Claude denkt na…');
+    log.append(el('p', 'q', q), wait); log.scrollTop = log.scrollHeight;
+    const earlier = turns.slice(-4).map(t => `Vraag: ${t.q}\nAntwoord: ${t.a}`).join('\n\n');
+    try {
+      const out = await call(`Mindmap:\n${o.text}\n` + (o.picked ? `Geselecteerde tak: ${o.picked}\n\n` : '\n') + (earlier ? `Eerder in dit gesprek:\n${earlier}\n\n` : '') + `Vraag: ${q}`);
+      turns.push({ q, a: out.reply });
+      wait.replaceWith(el('p', 'a', out.reply));
+      const sug = (out.suggestions || []).filter(s => s.text);
+      if (sug.length) {
+        const box = el('div', 'sug'), byId = new Map(sug.map(s => [s.id, s]));
+        const where = s => byId.get(s.parent)?.text || info.get(o.ids.get(s.parent))?.node.text || '?';
+        for (const s of sug) { const l = el('label'), c = el('input'); c.type = 'checkbox'; c.checked = true; c.value = s.id; l.append(c, el('span', '', s.text), el('small', '', 'onder: ' + where(s))); box.append(l); }
+        const b = el('button', 'primary', 'Voeg geselecteerde toe'); b.type = 'button';
+        b.onclick = () => {
+          const on = new Set([...box.querySelectorAll('input:checked')].map(c => c.value)), n = addPicked(sug.filter(s => on.has(s.id)), o.ids);
+          box.replaceWith(el('p', 'wait', n + (n === 1 ? ' tak toegevoegd.' : ' takken toegevoegd.')));
+        };
+        box.append(b); log.append(box);
+      }
+    } catch (e) { console.warn('claude', e); wait.replaceWith(el('p', 'err', explain(e))); }
+    busy = false; log.scrollTop = log.scrollHeight;
+  }
+  $('tAi').onclick = () => { commitEdit(); $('ai').hidden = !$('ai').hidden; if (!$('ai').hidden) $('aiQ').focus(); };
+  $('aiClose').onclick = () => { $('ai').hidden = true; };
+  $('aiForm').onsubmit = e => { e.preventDefault(); ask($('aiQ').value); };
+  $('aiQ').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); ask($('aiQ').value); } };
+  $('aiKids').onclick = () => ask('Stel subtakken voor bij de geselecteerde tak. Als er geen tak geselecteerd is, stel dan hoofdtakken voor.');
+  $('aiGaps').onclick = () => ask('Wat ontbreekt er nog in deze mindmap? Stel de belangrijkste aanvullingen voor.');
+  $('aiTidy').onclick = () => ask('Hoe kan ik de structuur van deze mindmap verbeteren? Geef concreet advies.');
+  return {};
 })();
 
 /* ---------- Todoist. De koppeling (node.task) zit in de mindmap en synct mee; het token staat alleen op dit apparaat. ---------- */

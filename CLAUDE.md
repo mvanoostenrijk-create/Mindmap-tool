@@ -11,6 +11,9 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 - Model: `map = {id,title,updated,root,theme?}`; node = `{id,text,children[],collapsed?,side?,color?,icon?,note?,link?,task?}`. `side` alleen op kinderen van de root; `color` (index in palet) erft naar beneden. `theme = {style,edge,palette}` (zie `theme()`, `PALETTES`). Titel = tekst van de root.
 - Overzicht (`#portal`, `drawList`, `miniSvg`) is de startpagina; `route()` kiest op basis van `#m=<id>`. `body.home` = overzicht zichtbaar. `arrange()` is de gedeelde boomindeling (editor en miniaturen).
 - Opmaak-venster: module `format`. Icoon/taak/notitie/link tonen via `data-pre`/`data-post` op `.txt` (`pre()`, `post()`), ook in de export.
+- Verbindingen: `map.links = [{id,a,b}]`, getekend in `layout()` via `linkShape()`; `selLink`/`linking` zijn de selectie- en tekenstand. Undo-snapshot bevat `root` + `links`.
+- Afbeeldingen: `node.img = {src (data-URL, max 320px), w, h, by?}` via `shrink()`; module `media` (bestand of Pexels). Sleutels per apparaat via module `keys` (`mm:pexels`, `mm:claude`).
+- Claude: module `claude`, rechtstreeks `fetch` naar de Messages API (geen SDK: app heeft geen build-stap). Model `claude-opus-5-5`, effort `medium`, structured output (`reply` + `suggestions`), `fallbacks: "default"`. Elke vraag is één losstaand user-bericht (geen assistant-beurten terugsturen). Bij wijzigingen eerst de skill `claude-api` lezen.
 - `render()` → `index()` (info per node) → DOM-nodes in `#world` → `layout()` (automatische boomindeling, links/rechts) → SVG-lijnen.
 - Wijzigingen altijd via `change(fn)` (undo-snapshot + opslaan + render).
 - Invoer: pointer events (pan, pinch, slepen = verplaatsen/herordenen, dubbeltik = bewerken) en toetsenbord (Tab, Enter, Delete, F2, spatie, pijlen, Ctrl+Z/Y).
@@ -20,6 +23,8 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 2. Login + cloud-sync + PWA — KLAAR. Draait op GitHub Pages (repo is publiek): https://mvanoostenrijk-create.github.io/Mindmap-tool/ ; gebruiker bevestigt dat het werkt, ook op iPad.
 3. Todoist — KLAAR (module `todoist` in app.js). API v1 (`https://api.todoist.com/api/v1/`), rechtstreeks vanuit de browser met persoonlijk token in localStorage (per apparaat). `node.task = {id, done, due, gone?}` synct mee. Status via GET `tasks/{id}` bij openen, terugkeren naar de app en elke 5 min. Gebruiker bevestigt dat het werkt.
 4. Export — GEBOUWD (zijbalk): PNG via canvas (`drawCanvas`, altijd licht thema), PDF als zelfgebouwd één-pagina-A4-bestand met JPEG (`makePdf`), Markdown-outline (`outline`) als bestand of naar klembord. `deliver()` gebruikt op touch-apparaten het deelmenu, anders download. Getest in Chromium; deelmenu op iPad nog niet bevestigd.
+
+6. Verbindingen, afbeeldingen + Pexels, Claude-paneel — GEBOUWD; Pexels en Claude alleen getest met nagebootste API's (CORS in de praktijk onbevestigd). Webvoorbeeld van een link: nog niet gebouwd, wacht op keuze van de gebruiker.
 
 5. Opmaak per tak, thema's per mindmap, overzichtspagina, README — GEBOUWD, getest in Chromium.
 

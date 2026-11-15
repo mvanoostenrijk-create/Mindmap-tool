@@ -25,7 +25,15 @@
   <button id="bFit" title="Passend maken" aria-label="Passend maken">⤢</button>
 </header>
 
+<div id="stage">
 <main id="canvas"><div id="world"><svg id="edges" width="1" height="1"></svg></div></main>
+<aside id="ai" hidden aria-label="Claude">
+  <div class="aiHead"><h2>Claude</h2><button type="button" id="aiClose" aria-label="Sluiten">✕</button></div>
+  <div class="chips"><button type="button" id="aiKids">Stel subtakken voor</button><button type="button" id="aiGaps">Wat ontbreekt?</button><button type="button" id="aiTidy">Verbeter de structuur</button></div>
+  <div id="aiLog"></div>
+  <form id="aiForm"><textarea id="aiQ" rows="2" placeholder="Vraag iets over deze mindmap…" aria-label="Vraag aan Claude"></textarea><button class="primary">Vraag</button></form>
+</aside>
+</div>
 
 <div id="peek" hidden><a id="peekLink" target="_blank" rel="noopener"></a><span id="peekNote"></span></div>
 <nav id="tools">
@@ -34,6 +42,8 @@
   <button id="tEdit" title="F2 of dubbelklik">Bewerk</button>
   <button id="tFold" title="Spatie">Klap in/uit</button>
   <button id="tFmt" title="Kleur, icoon, notitie, link en thema">Opmaak</button>
+  <button id="tLink" title="Verbindingspijl naar een andere tak">Verbind</button>
+  <button id="tAi" title="Claude denkt mee">✨ Claude</button>
   <button id="tTask" title="Taak in Todoist">✓ Taak</button>
   <button id="tDel" title="Delete">Verwijder</button>
 </nav>
@@ -61,6 +71,7 @@
     </form>
     <button id="tdOff" hidden>Todoist ontkoppelen</button>
   </section>
+  <section id="keys"></section>
   <div class="foot mapOnly">
     <button id="xPng">Afbeelding</button>
     <button id="xPdf">PDF</button>
@@ -96,6 +107,15 @@
   <h2>Opmaak van deze tak</h2>
   <div class="grp">Kleur (geldt ook voor de takken eronder)<div id="fColors" class="chips"></div></div>
   <div class="grp">Icoon<div id="fIcons" class="chips"></div></div>
+  <div class="grp">Afbeelding
+    <div class="chips"><button type="button" id="fImgPick">Kies bestand</button><button type="button" id="fImgStock">Stockfoto zoeken</button><button type="button" id="fImgDel">Verwijder</button></div>
+    <input id="fImgFile" type="file" accept="image/*" hidden>
+    <div id="fStock" hidden>
+      <div class="pair"><input id="fStockQ" type="search" placeholder="Zoek op Pexels" aria-label="Zoek op Pexels"><button type="button" id="fStockGo">Zoek</button></div>
+      <div id="fStockOut"></div>
+    </div>
+    <p id="fImgMsg"></p>
+  </div>
   <label>Notitie <textarea id="fNote" rows="3"></textarea></label>
   <label>Link <input id="fLink" inputmode="url" autocomplete="off" placeholder="https://…"></label>
   <h2>Thema van deze mindmap</h2>

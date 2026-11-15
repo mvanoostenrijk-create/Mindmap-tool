@@ -55,8 +55,42 @@ Selecteer een tak en klik op "Opmaak".
 
 - **Kleur:** geldt voor de tak en alle takken eronder.
 - **Icoon:** verschijnt vóór de tekst.
+- **Afbeelding:** kies een eigen bestand of zoek een stockfoto. De afbeelding wordt verkleind tot een miniatuur en in de mindmap zelf bewaard; het origineel niet.
 - **Notitie:** extra toelichting. De tak krijgt een 🗒 en de notitie verschijnt onderin beeld als je de tak selecteert.
 - **Link:** een webadres. De tak krijgt een 🔗 en de link verschijnt onderin beeld als je de tak selecteert.
+
+## Stockfoto's (Pexels)
+
+**Eenmalig, per apparaat:** maak een gratis account op pexels.com, vraag op pexels.com/api een sleutel aan en plak die in de app onder ☰ → "Pexels-sleutel".
+
+Daarna: Opmaak → "Stockfoto zoeken", typ een zoekwoord en tik op een foto. Engelse zoekwoorden geven vaak meer resultaat. De naam van de fotograaf verschijnt als je met de muis op de afbeelding staat.
+
+## Verbindingen
+
+Een verbinding is een gestippelde pijl tussen twee takken die niet onder elkaar hangen.
+
+| Wat | Hoe |
+|---|---|
+| Verbinding maken | Selecteer de begintak, klik op "Verbind" en tik op de doeltak |
+| Annuleren | Esc, of tik op de achtergrond |
+| Verbinding verwijderen | Tik op de pijl en druk op Delete, of klik op "Verwijder" |
+
+Zit een van de twee takken in een ingeklapt deel, dan is de pijl tijdelijk onzichtbaar.
+
+## Claude denkt mee
+
+**Eenmalig, per apparaat:** maak een account op console.anthropic.com, zet er tegoed op, maak een API-sleutel aan en plak die in de app onder ☰ → "Claude API-sleutel". Dit staat los van een Claude-abonnement: je betaalt per vraag.
+
+Klik op "✨ Claude" voor het zijpaneel.
+
+- **Stel subtakken voor:** voorstellen bij de geselecteerde tak.
+- **Wat ontbreekt?:** aanvullingen voor de hele mindmap.
+- **Verbeter de structuur:** advies over de opbouw.
+- **Eigen vraag:** typ hem onderin.
+
+Voorstellen verschijnen als lijst met vinkjes. Met "Voeg geselecteerde toe" komen ze in de mindmap; met Ctrl+Z haal je ze weer weg.
+
+Bij elke vraag gaat de volledige tekst van de mindmap, inclusief notities, naar Anthropic. Een grote mindmap kost daardoor meer per vraag.
 
 ## Thema
 
@@ -128,10 +162,12 @@ Dit staat los van de synchronisatie en is bedoeld als extra kopie.
 | Komt mee | Komt niet mee |
 |---|---|
 | Structuur en teksten | Kleuren en stijlen (de app kiest zelf een kleur per hoofdtak) |
-| Links en rechts van het midden | Afbeeldingen en bijlagen |
-| Notities, als platte tekst | Verbindingspijlen tussen takken |
+| Links en rechts van het midden | Afbeeldingen op volle grootte |
+| Notities, als platte tekst | Bijlagen zoals documenten |
 | Weblinks | Taken en opmerkingen uit MindMeister |
 | De meest gebruikte iconen | Overige iconen |
+| Verbindingspijlen | |
+| Afbeeldingen als miniatuur (alleen uit een zip) | |
 
 Een mindmap met meer dan 150 takken wordt vanaf het derde niveau ingeklapt geïmporteerd, zodat hij te overzien blijft. Het getal in het rondje toont hoeveel takken eronder zitten.
 
