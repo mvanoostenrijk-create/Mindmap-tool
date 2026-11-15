@@ -207,3 +207,4 @@ body.home .mapOnly { display: none !important; }
 /* iOS: de pagina zelf mag nooit schuiven, anders verdwijnt de bovenbalk na het typen */
 html { overflow: hidden; }
 body { position: fixed; inset: 0; height: auto; }
+.key + .key { border-top: 1px solid var(--line); padding-top: 12px; }

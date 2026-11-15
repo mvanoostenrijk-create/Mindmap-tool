@@ -882,6 +882,7 @@ const keys = (() => {
     box.innerHTML = '<p></p><form><input type="password" autocomplete="off" required><button>Bewaar</button></form><button type="button">Sleutel verwijderen</button>';
     const [p, form, del] = box.children, input = form.firstChild;
     input.placeholder = label; input.setAttribute('aria-label', label);
+    del.textContent = label.split(/[ -]/)[0] + ' ontkoppelen';
     const draw = () => { const has = !!get(k); p.textContent = has ? on : off; form.hidden = has; del.hidden = !has; };
     form.onsubmit = e => { e.preventDefault(); put(k, input.value.trim()); input.value = ''; draw(); };
     del.onclick = () => { put(k, ''); draw(); };
