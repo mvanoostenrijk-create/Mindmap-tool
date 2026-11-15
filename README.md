@@ -119,8 +119,27 @@ Afbeelding en PDF tonen wat je ziet: ingeklapte takken blijven dicht. De tekstex
 
 Dit staat los van de synchronisatie en is bedoeld als extra kopie.
 
+## Importeren uit MindMeister
+
+1. Open de mindmap in MindMeister en kies Exporteren → FreeMind (.mm). Bevat de mindmap bijlagen, dan krijg je een zip-bestand; dat is ook goed.
+2. Klik in het overzicht van de app op "Importeren" en selecteer één of meer bestanden tegelijk.
+3. Elke mindmap verschijnt als nieuwe kaart en synchroniseert mee.
+
+| Komt mee | Komt niet mee |
+|---|---|
+| Structuur en teksten | Kleuren en stijlen (de app kiest zelf een kleur per hoofdtak) |
+| Links en rechts van het midden | Afbeeldingen en bijlagen |
+| Notities, als platte tekst | Verbindingspijlen tussen takken |
+| Weblinks | Taken en opmerkingen uit MindMeister |
+| De meest gebruikte iconen | Overige iconen |
+
+Een mindmap met meer dan 150 takken wordt vanaf het derde niveau ingeklapt geïmporteerd, zodat hij te overzien blijft. Het getal in het rondje toont hoeveel takken eronder zitten.
+
+Via dezelfde knop kun je ook een eigen back-up (.json) terugzetten.
+
 ## Techniek en beheer
 
 - De app is een statische website zonder bouwstap: `index.html`, `style.css` en `app.js`. Hosting via GitHub Pages; een wijziging op de `main`-branch staat na een à twee minuten online.
+- Op het apparaat zelf staan mindmaps in de browseropslag (IndexedDB), zodat de app ook offline werkt.
 - Mindmaps staan in een Supabase-database (EU-regio), afgeschermd per gebruiker. De tabel staat beschreven in `supabase.sql`, de projectgegevens in `config.js`.
 - `CLAUDE.md` beschrijft de opbouw van de code voor wie eraan verder werkt.

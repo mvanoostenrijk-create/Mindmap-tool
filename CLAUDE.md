@@ -5,7 +5,8 @@ Overig: `config.js` (Supabase-URL + publishable key), `supabase.js` (supabase-js
 Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, geen onnodige bestanden.
 
 ## Opzet app.js
-- `store`: lokale opslag (localStorage) met async `list/load/save/remove`; blijft leidend (offline).
+- `store`: lokale opslag met async `list/load/save/remove`; blijft leidend (offline). Mindmaps in IndexedDB (`idb`), index/tombstones/instellingen in localStorage; `keep()` schrijft een synchrone noodkopie naar localStorage bij afsluiten.
+- Import (`importFiles`, `parseFreemind`, `unzip` incl. zip64): MindMeister-export als FreeMind .mm of zip, en eigen .json. Getest met een echte export van 943 takken.
 - `cloud`: sync met Supabase-tabel `maps`, per mindmap wint de laatste wijziging (`updated`), verwijderen via tombstone (`deleted`). Alleen inloggen met e-mail + wachtwoord; gebruiker is handmatig in Supabase aangemaakt. Getest met nagebootste backend, zie fases.
 - Model: `map = {id,title,updated,root,theme?}`; node = `{id,text,children[],collapsed?,side?,color?,icon?,note?,link?,task?}`. `side` alleen op kinderen van de root; `color` (index in palet) erft naar beneden. `theme = {style,edge,palette}` (zie `theme()`, `PALETTES`). Titel = tekst van de root.
 - Overzicht (`#portal`, `drawList`, `miniSvg`) is de startpagina; `route()` kiest op basis van `#m=<id>`. `body.home` = overzicht zichtbaar. `arrange()` is de gedeelde boomindeling (editor en miniaturen).

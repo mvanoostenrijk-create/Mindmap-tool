@@ -1,24 +1,50 @@
 'use strict';
 
 /* ---------- Opslag. Fase 2 vervangt dit object door cloud-sync met dezelfde functies. ---------- */
+// Mindmaps staan in IndexedDB (ruimte genoeg voor tientallen grote mindmaps); alleen kleine lijstjes staan in localStorage.
+const idb = (() => {
+  let dbp;
+  const open = () => dbp ||= new Promise((res, rej) => {
+    const r = indexedDB.open('mindmap', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('maps');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+  const tx = (mode, fn) => open().then(db => new Promise((res, rej) => {
+    const t = db.transaction('maps', mode), q = fn(t.objectStore('maps'));
+    t.oncomplete = () => res(q.result); t.onerror = t.onabort = () => rej(t.error);
+  }));
+  return { get: k => tx('readonly', s => s.get(k)), set: (k, v) => tx('readwrite', s => s.put(v, k)), del: k => tx('readwrite', s => s.delete(k)) };
+})();
+let storeFull = false;   // opslag van de browser zit vol of is geblokkeerd
 const store = (() => {
   const K = 'mm:', mem = {};
   const get = k => { try { const v = localStorage.getItem(k); if (v !== null) return v; } catch {} return mem[k] ?? null; };
-  const set = (k, v) => { mem[k] = v; try { localStorage.setItem(k, v); } catch {} };
+  const set = (k, v) => { mem[k] = v; try { localStorage.setItem(k, v); } catch { storeFull = true; } };
   const del = k => { delete mem[k]; try { localStorage.removeItem(k); } catch {} };
   const idx = () => JSON.parse(get(K + 'index') || '[]');
   return {
     async list() { return idx().sort((a, b) => b.updated - a.updated); },
-    async load(id) { const s = get(K + 'map:' + id); return s ? JSON.parse(s) : null; },
+    async load(id) {   // nieuwste van beide plekken: localStorage bevat alleen een noodkopie (zie keep) of data van vóór IndexedDB
+      let a = null, b = null;
+      try { a = await idb.get(id) || null; } catch {}
+      try { const s = get(K + 'map:' + id); b = s ? JSON.parse(s) : null; } catch {}
+      if (b) {   // noodkopie opruimen of alsnog naar IndexedDB verhuizen
+        if (a && a.updated >= b.updated) del(K + 'map:' + id);
+        else idb.set(id, b).then(() => del(K + 'map:' + id)).catch(() => {});
+      }
+      return a && b ? (b.updated > a.updated ? b : a) : a || b;
+    },
+    keep(m) { try { localStorage.setItem(K + 'map:' + m.id, JSON.stringify(m)); } catch {} },   // direct, voor als de app net wordt gesloten
     // quiet = afkomstig van de cloud: niet opnieuw terugsturen
     async save(m, quiet) {
-      set(K + 'map:' + m.id, JSON.stringify(m));
+      try { await idb.set(m.id, JSON.parse(JSON.stringify(m))); del(K + 'map:' + m.id); } catch { set(K + 'map:' + m.id, JSON.stringify(m)); }
       const l = idx().filter(x => x.id !== m.id);
       l.unshift({ id: m.id, title: m.title, updated: m.updated });
       set(K + 'index', JSON.stringify(l));
       if (!quiet) cloud.kick();
     },
     async remove(id, quiet) {
+      try { await idb.del(id); } catch {}
       del(K + 'map:' + id); set(K + 'index', JSON.stringify(idx().filter(x => x.id !== id)));
       if (!quiet) { const g = this.gone(); g[id] = Date.now(); this.setGone(g); cloud.kick(); }
     },
@@ -52,7 +78,8 @@ let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
 const els = new Map(), geo = new Map();
 let info = new Map();
-const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+let uidN = 0;
+const uid = () => Date.now().toString(36) + (uidN++).toString(36) + Math.random().toString(36).slice(2, 7);
 const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
 
 /* ---------- Model ---------- */
@@ -70,7 +97,7 @@ function touch() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 300);
 }
-function flush() { clearTimeout(saveTimer); saveTimer = 0; if (map) store.save(map); }
+function flush() { clearTimeout(saveTimer); saveTimer = 0; if (map) { store.keep(map); store.save(map); } }
 function snap() { undo.push(JSON.stringify(map.root)); if (undo.length > 100) undo.shift(); redo = []; }
 function change(fn) { snap(); fn(); touch(); render(); }
 function timeTravel(from, to) {
@@ -479,6 +506,90 @@ async function drawList() {
   }
   grid.replaceChildren(...cards);
 }
+/* ---------- Importeren: MindMeister-export (FreeMind .mm, los of in een zip) of een eigen back-up (.json) ---------- */
+const FM_ICONS = { button_ok: '✅', button_cancel: '⛔', stop: '⛔', bookmark: '⭐', help: '❓', idea: '💡', messagebox_warning: '❗', yes: '❗',
+  calendar: '📅', attach: '📎', flag: '📌', group: '👥', male1: '👤', female1: '👤', launch: '🚀', info: '💬', pencil: '💬' };
+function htmlToText(h) {
+  const d = new DOMParser().parseFromString(h, 'text/html');
+  d.querySelectorAll('br,p,div,li').forEach(e => e.append('\n'));
+  return d.body.textContent.replace(/\n{3,}/g, '\n\n').trim();
+}
+function parseFreemind(xml) {
+  // Notities bevatten HTML die geen geldige XML is: eerst apart zetten, dan de rest als XML lezen.
+  const rich = [];
+  xml = xml.replace(/<richcontent\b[^>]*TYPE="(\w+)"[^>]*>([\s\S]*?)<\/richcontent>/g, (_, type, body) => `<rc t="${type}" i="${rich.push(body) - 1}"/>`);
+  const doc = new DOMParser().parseFromString(xml, 'text/xml'), top = doc.querySelector('map > node');
+  if (!top || doc.querySelector('parsererror')) throw new Error('geen FreeMind-bestand');
+  let count = 0, branch = 0;
+  const conv = (el, depth) => {
+    count++;
+    const n = { id: uid(), text: el.getAttribute('TEXT') || '', children: [] }, kids = [...el.children];
+    const icon = kids.map(k => k.tagName === 'icon' && FM_ICONS[k.getAttribute('BUILTIN')]).find(Boolean), link = el.getAttribute('LINK') || '';
+    if (icon) n.icon = icon;
+    if (/^https?:\/\//i.test(link) && !/mindmeister\.com\/assets/i.test(link)) n.link = link;
+    for (const k of kids) if (k.tagName === 'rc') {
+      let t = htmlToText(rich[k.getAttribute('i')]);
+      if (/<\w+[^>]*>/.test(t)) t = htmlToText(t);
+      if (k.getAttribute('t') === 'NOTE') { if (t) n.note = t; } else if (!n.text) n.text = t;
+    }
+    if (el.getAttribute('FOLDED') === 'true') n.collapsed = true;
+    if (depth === 1) { n.side = el.getAttribute('POSITION') === 'left' ? 'left' : 'right'; n.color = branch++; }
+    n.children = kids.filter(k => k.tagName === 'node').map(k => conv(k, depth + 1));
+    return n;
+  };
+  const root = conv(top, 0);
+  // Grote mindmap: alles vanaf het derde niveau ingeklapt, anders is hij niet te overzien
+  if (count > 150) (function fold(n, d) { for (const c of n.children) { if (d >= 1 && c.children.length) c.collapsed = true; fold(c, d + 1); } })(root, 0);
+  return root;
+}
+async function unzip(buf, want) {
+  const v = new DataView(buf), u8 = new Uint8Array(buf), out = [];
+  let e = buf.byteLength - 22;
+  while (e >= 0 && v.getUint32(e, true) !== 0x06054b50) e--;
+  if (e < 0) throw new Error('geen zip');
+  let p = v.getUint32(e + 16, true);
+  for (let i = v.getUint16(e + 10, true); i > 0; i--) {
+    const method = v.getUint16(p + 10, true), nl = v.getUint16(p + 28, true), xl = v.getUint16(p + 30, true);
+    let size = v.getUint32(p + 20, true), off = v.getUint32(p + 42, true);
+    for (let q = p + 46 + nl; q < p + 46 + nl + xl; q += 4 + v.getUint16(q + 2, true)) if (v.getUint16(q, true) === 1) {   // zip64: echte groottes staan in een extra veld
+      let r = q + 4; if (v.getUint32(p + 24, true) === 0xFFFFFFFF) r += 8;
+      if (size === 0xFFFFFFFF) { size = Number(v.getBigUint64(r, true)); r += 8; }
+      if (off === 0xFFFFFFFF) off = Number(v.getBigUint64(r, true));
+    }
+    const name = new TextDecoder().decode(u8.subarray(p + 46, p + 46 + nl));
+    if (want(name)) {
+      const at = off + 30 + v.getUint16(off + 26, true) + v.getUint16(off + 28, true), raw = u8.subarray(at, at + size);
+      const bytes = method === 0 ? raw : await new Response(new Blob([raw]).stream().pipeThrough(new DecompressionStream('deflate-raw'))).arrayBuffer();
+      out.push({ name, text: new TextDecoder().decode(bytes) });
+    }
+    p += 46 + nl + xl + v.getUint16(p + 32, true);
+  }
+  return out;
+}
+async function importFiles(files) {
+  let ok = 0; const bad = [];
+  $('pMsg').textContent = 'Importeren…';
+  for (const f of files) {
+    try {
+      const buf = await f.arrayBuffer(), zipped = buf.byteLength > 4 && new DataView(buf).getUint32(0, true) === 0x04034b50;
+      const docs = zipped ? await unzip(buf, n => /\.mm$/i.test(n)) : [{ text: new TextDecoder().decode(buf) }];
+      if (!docs.length) throw new Error('geen mindmap in zip');
+      for (const d of docs) {
+        let m;
+        if (/^\s*\{/.test(d.text)) { m = JSON.parse(d.text); if (!m.root?.id || !Array.isArray(m.root.children)) throw new Error('geen back-up'); }
+        else m = { root: parseFreemind(d.text) };
+        m.id = uid(); m.title = m.root.text.trim() || 'Naamloos'; m.updated = Date.now();
+        await store.save(m); ok++;
+      }
+    } catch (e) { console.warn('import', f.name, e); bad.push(f.name); }
+  }
+  $('pMsg').textContent = `${ok} ${ok === 1 ? 'mindmap' : 'mindmaps'} geïmporteerd.` + (bad.length ? ' Niet gelukt: ' + bad.join(', ') + '.' : '')
+    + (storeFull ? ' Let op: de opslag van dit apparaat is vol; niet alles is bewaard.' : '');
+  drawList();
+}
+$('pImp').onclick = () => $('pFile').click();
+$('pFile').onchange = e => { const l = [...e.target.files]; e.target.value = ''; if (l.length) importFiles(l); };
+
 function showPortal() {
   commitEdit(); flush();
   document.body.classList.add('home'); document.title = 'Mijn mindmaps';
