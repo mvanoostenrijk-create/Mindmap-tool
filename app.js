@@ -432,7 +432,7 @@ $('dFile').onchange = async e => {
     if (!m.root?.id || !Array.isArray(m.root.children)) throw 0;
     m.id = uid(); m.title = m.root.text || 'Naamloos'; m.updated = Date.now();
     await store.save(m); closeDrawer(); openMap(m);
-  } catch { $('dImport').textContent = 'Geen geldige back-up'; setTimeout(() => $('dImport').textContent = 'Back-up openen', 2500); }
+  } catch { $('dImport').textContent = 'Geen geldige back-up'; setTimeout(() => $('dImport').textContent = 'Back-up terugzetten', 2500); }
 };
 
 /* ---------- Cloud-sync (Supabase). Lokaal blijft leidend voor snelheid en offline; per mindmap wint de laatste wijziging. ---------- */
