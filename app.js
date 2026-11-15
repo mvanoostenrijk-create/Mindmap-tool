@@ -855,7 +855,7 @@ const keys = (() => {
   const get = k => { try { return localStorage.getItem(k) || ''; } catch { return ''; } };
   const put = (k, v) => { try { v ? localStorage.setItem(k, v) : localStorage.removeItem(k); } catch {} };
   const DEFS = [
-    ['mm:pexels', 'Pexels-sleutel', 'Stockfoto\'s: gratis sleutel via pexels.com/api.', 'Pexels is gekoppeld op dit apparaat.'],
+    ['mm:pexels', 'Pexels-sleutel', 'Stockfoto\'s: zonder sleutel zoekt de app in Openverse (rechtenvrij). Met een gratis sleutel van pexels.com/api zoekt hij in Pexels.', 'Pexels is gekoppeld op dit apparaat.'],
     ['mm:claude', 'Claude API-sleutel', 'Claude: sleutel via console.anthropic.com. Gebruik kost apart geld en bij elke vraag gaat de inhoud van de mindmap naar Anthropic.', 'Claude is gekoppeld op dit apparaat.']
   ];
   for (const [k, label, off, on] of DEFS) {
@@ -882,29 +882,33 @@ const media = (() => {
     try { set(await shrink(f)); msg(''); } catch { msg('Dit bestand is geen afbeelding die ik kan lezen.'); }
   };
   $('fImgDel').onclick = () => { set(null); msg(''); };
-  $('fImgStock').onclick = () => {
-    if (!keys.get('mm:pexels')) return msg('Vul eerst je Pexels-sleutel in onder ☰ (instellingen).');
-    $('fStock').hidden = false; $('fStockQ').value ||= (format.node()?.text || '').slice(0, 40); $('fStockQ').focus();
-  };
+  $('fImgStock').onclick = () => { $('fStock').hidden = false; $('fStockQ').value ||= (format.node()?.text || '').slice(0, 40); $('fStockQ').focus(); };
+  // Twee bronnen: Pexels als er een sleutel is, anders Openverse (geen account nodig; alleen rechtenvrij: CC0 en publiek domein)
+  async function find(q) {
+    const key = keys.get('mm:pexels'), get = async (url, headers) => { const r = await fetch(url, { headers }); if (!r.ok) throw Object.assign(new Error(), { status: r.status }); return r.json(); };
+    if (key) return ((await get('https://api.pexels.com/v1/search?per_page=12&locale=nl-NL&query=' + encodeURIComponent(q), { Authorization: key })).photos || [])
+      .map(p => ({ thumb: p.src.tiny, full: [p.src.medium], by: 'Foto: ' + p.photographer + ' (Pexels)', alt: p.alt }));
+    return ((await get('https://api.openverse.org/v1/images/?page_size=12&license=cc0,pdm&q=' + encodeURIComponent(q))).results || [])
+      .map(p => ({ thumb: p.thumbnail || p.url, full: [p.thumbnail, p.url].filter(Boolean), by: 'Foto: ' + (p.creator || 'onbekend') + ' (via Openverse, rechtenvrij)', alt: p.title }));
+  }
   async function search() {
     const q = $('fStockQ').value.trim(); if (!q) return;
-    msg('Zoeken…'); $('fStockOut').textContent = '';
+    const src = keys.get('mm:pexels') ? 'Pexels' : 'Openverse';
+    msg('Zoeken in ' + src + '…'); $('fStockOut').textContent = '';
     try {
-      const r = await fetch('https://api.pexels.com/v1/search?per_page=12&locale=nl-NL&query=' + encodeURIComponent(q), { headers: { Authorization: keys.get('mm:pexels') } });
-      if (!r.ok) throw Object.assign(new Error(), { status: r.status });
-      const photos = (await r.json()).photos || [];
+      const photos = await find(q);
       msg(photos.length ? 'Tik op een foto om hem te gebruiken.' : 'Niets gevonden. Probeer een ander zoekwoord, eventueel in het Engels.');
       $('fStockOut').replaceChildren(...photos.map(ph => {
         const b = document.createElement('button'), im = document.createElement('img');
-        b.type = 'button'; b.title = 'Foto: ' + ph.photographer; im.src = ph.src.tiny; im.alt = ph.alt || q; im.loading = 'lazy'; b.append(im);
+        b.type = 'button'; b.title = ph.by; im.src = ph.thumb; im.alt = ph.alt || q; im.loading = 'lazy'; b.append(im);
         b.onclick = async () => {
           msg('Foto ophalen…');
-          try { const img = await shrink(await (await fetch(ph.src.medium)).blob()); img.by = 'Foto: ' + ph.photographer + ' (Pexels)'; set(img); reset(); }
-          catch { msg('Deze foto kon niet worden opgehaald.'); }
+          for (const url of ph.full) try { const img = await shrink(await (await fetch(url)).blob()); img.by = ph.by; set(img); return reset(); } catch {}
+          msg('Deze foto kon niet worden opgehaald. Kies een andere.');
         };
         return b;
       }));
-    } catch (e) { msg(e.status === 401 || e.status === 403 ? 'Pexels weigert de sleutel. Controleer hem onder ☰.' : e.status === 429 ? 'De limiet van Pexels is bereikt. Probeer het over een uur opnieuw.' : 'Pexels is niet bereikbaar.'); }
+    } catch (e) { msg(e.status === 401 || e.status === 403 ? src + ' weigert de aanvraag' + (src === 'Pexels' ? '. Controleer de sleutel onder ☰.' : '.') : e.status === 429 ? 'De limiet van ' + src + ' is bereikt. Probeer het later opnieuw.' : src + ' is niet bereikbaar.'); }
   }
   $('fStockGo').onclick = search;
   $('fStockQ').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); search(); } };

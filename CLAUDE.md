@@ -12,7 +12,7 @@ Gebruiker werkt met beperkte tokens: één fase per sessie, geen frameworks, gee
 - Overzicht (`#portal`, `drawList`, `miniSvg`) is de startpagina; `route()` kiest op basis van `#m=<id>`. `body.home` = overzicht zichtbaar. `arrange()` is de gedeelde boomindeling (editor en miniaturen).
 - Opmaak-venster: module `format`. Icoon/taak/notitie/link tonen via `data-pre`/`data-post` op `.txt` (`pre()`, `post()`), ook in de export.
 - Verbindingen: `map.links = [{id,a,b}]`, getekend in `layout()` via `linkShape()`; `selLink`/`linking` zijn de selectie- en tekenstand. Undo-snapshot bevat `root` + `links`.
-- Afbeeldingen: `node.img = {src (data-URL, max 320px), w, h, by?}` via `shrink()`; module `media` (bestand of Pexels). Sleutels per apparaat via module `keys` (`mm:pexels`, `mm:claude`).
+- Afbeeldingen: `node.img = {src (data-URL, max 320px), w, h, by?}` via `shrink()`; module `media` (bestand, Pexels met sleutel, anders Openverse `api.openverse.org/v1/images/` met `license=cc0,pdm`). Sleutels per apparaat via module `keys` (`mm:pexels`, `mm:claude`).
 - Claude: module `claude`, rechtstreeks `fetch` naar de Messages API (geen SDK: app heeft geen build-stap). Model `claude-opus-5-5`, effort `medium`, structured output (`reply` + `suggestions`), `fallbacks: "default"`. Elke vraag is één losstaand user-bericht (geen assistant-beurten terugsturen). Bij wijzigingen eerst de skill `claude-api` lezen.
 - `render()` → `index()` (info per node) → DOM-nodes in `#world` → `layout()` (automatische boomindeling, links/rechts) → SVG-lijnen.
 - Wijzigingen altijd via `change(fn)` (undo-snapshot + opslaan + render).

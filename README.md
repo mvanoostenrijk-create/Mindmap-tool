@@ -59,11 +59,12 @@ Selecteer een tak en klik op "Opmaak".
 - **Notitie:** extra toelichting. De tak krijgt een 🗒 en de notitie verschijnt onderin beeld als je de tak selecteert.
 - **Link:** een webadres. De tak krijgt een 🔗 en de link verschijnt onderin beeld als je de tak selecteert.
 
-## Stockfoto's (Pexels)
+## Stockfoto's
 
-**Eenmalig, per apparaat:** maak een gratis account op pexels.com, vraag op pexels.com/api een sleutel aan en plak die in de app onder ☰ → "Pexels-sleutel".
+Opmaak → "Stockfoto zoeken", typ een zoekwoord en tik op een foto. Engelse zoekwoorden geven vaak meer resultaat. De naam van de maker verschijnt als je met de muis op de afbeelding staat.
 
-Daarna: Opmaak → "Stockfoto zoeken", typ een zoekwoord en tik op een foto. Engelse zoekwoorden geven vaak meer resultaat. De naam van de fotograaf verschijnt als je met de muis op de afbeelding staat.
+- **Zonder sleutel** zoekt de app in Openverse en toont alleen rechtenvrije afbeeldingen (CC0 en publiek domein). Geen account nodig.
+- **Met een Pexels-sleutel** zoekt de app in Pexels. Vraag een gratis sleutel aan op pexels.com/api en plak die per apparaat onder ☰ → "Pexels-sleutel".
 
 ## Verbindingen
 
