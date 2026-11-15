@@ -8,15 +8,22 @@ const store = (() => {
   const del = k => { delete mem[k]; try { localStorage.removeItem(k); } catch {} };
   const idx = () => JSON.parse(get(K + 'index') || '[]');
   return {
-    async list() { return idx(); },
+    async list() { return idx().sort((a, b) => b.updated - a.updated); },
     async load(id) { const s = get(K + 'map:' + id); return s ? JSON.parse(s) : null; },
-    async save(m) {
+    // quiet = afkomstig van de cloud: niet opnieuw terugsturen
+    async save(m, quiet) {
       set(K + 'map:' + m.id, JSON.stringify(m));
       const l = idx().filter(x => x.id !== m.id);
       l.unshift({ id: m.id, title: m.title, updated: m.updated });
       set(K + 'index', JSON.stringify(l));
+      if (!quiet) cloud.kick();
     },
-    async remove(id) { del(K + 'map:' + id); set(K + 'index', JSON.stringify(idx().filter(x => x.id !== id))); },
+    async remove(id, quiet) {
+      del(K + 'map:' + id); set(K + 'index', JSON.stringify(idx().filter(x => x.id !== id)));
+      if (!quiet) { const g = this.gone(); g[id] = Date.now(); this.setGone(g); cloud.kick(); }
+    },
+    gone() { return JSON.parse(get(K + 'gone') || '{}'); },   // lokaal verwijderd, nog door te geven aan de cloud
+    setGone(g) { set(K + 'gone', JSON.stringify(g)); },
     getLast() { return get(K + 'last'); },
     setLast(id) { set(K + 'last', id); }
   };
@@ -50,7 +57,7 @@ function touch() {
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flush, 300);
 }
-function flush() { clearTimeout(saveTimer); if (map) store.save(map); }
+function flush() { clearTimeout(saveTimer); saveTimer = 0; if (map) store.save(map); }
 function snap() { undo.push(JSON.stringify(map.root)); if (undo.length > 100) undo.shift(); redo = []; }
 function change(fn) { snap(); fn(); touch(); render(); }
 function timeTravel(from, to) {
@@ -334,7 +341,7 @@ function nav(key) {
 }
 
 document.addEventListener('keydown', e => {
-  if (!map || $('drawer').classList.contains('open')) { if (e.key === 'Escape') closeDrawer(); return; }
+  if (!map || $('drawer').classList.contains('open') || e.target.matches('input')) { if (e.key === 'Escape') closeDrawer(); return; }
   if (editing) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     else if (e.key === 'Escape') { e.preventDefault(); commitEdit(true); }
@@ -376,8 +383,15 @@ async function openMap(m) {
   store.setLast(m.id);
   render(); fit();
 }
+const FRESH = 'Nieuwe mindmap';
+const pristine = m => !m.root.children.length && m.root.text === FRESH;
+function replaceMap(m) {   // nieuwere versie van de open mindmap kwam binnen vanaf een ander apparaat
+  map = m; undo = []; redo = [];
+  index(); if (!info.has(sel)) sel = null;
+  render();
+}
 function newMap() {
-  const text = 'Nieuwe mindmap';
+  const text = FRESH;
   const m = { id: uid(), title: text, updated: Date.now(), root: { id: uid(), text, children: [] } };
   store.save(m);
   return openMap(m);
@@ -420,6 +434,96 @@ $('dFile').onchange = async e => {
     await store.save(m); closeDrawer(); openMap(m);
   } catch { $('dImport').textContent = 'Geen geldige back-up'; setTimeout(() => $('dImport').textContent = 'Back-up openen', 2500); }
 };
+
+/* ---------- Cloud-sync (Supabase). Lokaal blijft leidend voor snelheid en offline; per mindmap wint de laatste wijziging. ---------- */
+const cloud = (() => {
+  const cfg = window.MM_CONFIG || {};
+  const sb = cfg.url && cfg.key && window.supabase ? window.supabase.createClient(cfg.url, cfg.key) : null;
+  const LABEL = {
+    geen: 'Synchronisatie is nog niet ingesteld.', uit: 'Niet ingelogd: mindmaps staan alleen op dit apparaat.',
+    bezig: 'Synchroniseren…', ok: 'Gesynchroniseerd', offline: 'Offline: wijzigingen worden later verstuurd.',
+    fout: 'Synchroniseren is mislukt, ik probeer het opnieuw.'
+  };
+  let user = null, busy = false, again = false, timer = 0;
+  function set(s, msg) {
+    $('bSync').dataset.s = s; $('bSync').title = LABEL[s];
+    $('aStatus').textContent = msg || (user ? user.email + ' · ' : '') + LABEL[s];
+    $('aForm').hidden = !sb || !!user; $('aOut').hidden = !user;
+  }
+  const ok = r => { if (r.error) throw r.error; return r.data; };
+  const table = () => sb.from('maps');
+
+  async function push(id) {
+    const m = await store.load(id);
+    if (m) ok(await table().upsert({ id, title: m.title, data: m, updated: m.updated, deleted: false }));
+  }
+  async function pull(id) {
+    const m = ok(await table().select('data').eq('id', id).single()).data;
+    if (!m?.root) return;
+    if (map?.id !== id) return store.save(m, true);
+    if (editing || saveTimer) return;            // hier wordt net gewerkt: volgende ronde opnieuw bekijken
+    await store.save(m, true); replaceMap(m);
+  }
+  async function dropLocal(id) {
+    await store.remove(id, true);
+    if (map?.id !== id) return;
+    clearTimeout(saveTimer); saveTimer = 0; map = null;
+    const rest = await store.list(), x = rest[0] && await store.load(rest[0].id);
+    x ? await openMap(x) : await newMap();
+  }
+  async function sync() {
+    if (!sb || !user) return;
+    if (busy) { again = true; return; }
+    busy = true; set('bezig');
+    try {
+      const rows = ok(await table().select('id,updated,deleted'));
+      const local = new Map((await store.list()).map(m => [m.id, m])), gone = store.gone(), seen = new Set();
+      for (const r of rows) {
+        seen.add(r.id);
+        const l = local.get(r.id), g = gone[r.id];
+        if (l && l.updated > r.updated) await push(r.id);
+        else if (r.deleted) { if (l) await dropLocal(r.id); }
+        else if (g && g >= r.updated) ok(await table().update({ deleted: true, data: null, updated: g }).eq('id', r.id));
+        else if (!l || r.updated > l.updated) await pull(r.id);
+        delete gone[r.id];
+      }
+      for (const [id, l] of local) if (!seen.has(id)) { const m = await store.load(id); if (m && !pristine(m)) await push(id); }
+      for (const id in gone) if (!seen.has(id)) delete gone[id];
+      store.setGone(gone);
+      // nieuw apparaat: lege startmindmap vervangen door de laatst bewerkte uit de cloud
+      if (map && pristine(map) && !editing) {
+        const o = (await store.list()).find(x => x.id !== map.id), old = map.id;
+        if (o) { await openMap(await store.load(o.id)); await store.remove(old, true); }
+      }
+      set('ok');
+      if ($('drawer').classList.contains('open')) drawList();
+    } catch (e) { console.warn('sync', e); set(navigator.onLine ? 'fout' : 'offline'); }
+    busy = false;
+    if (again) { again = false; kick(); }
+  }
+  function kick() { if (!sb || !user) return; clearTimeout(timer); timer = setTimeout(sync, 1500); }
+
+  if (sb) {
+    sb.auth.onAuthStateChange((_e, session) => {
+      user = session?.user || null;
+      set(user ? 'bezig' : 'uit');
+      if (user) setTimeout(sync, 0);
+    });
+    $('aForm').onsubmit = async e => {
+      e.preventDefault(); set('bezig', 'Inloggen…');
+      const { error } = await sb.auth.signInWithPassword({ email: $('aMail').value.trim(), password: $('aPass').value });
+      if (error) set('uit', 'Inloggen is niet gelukt. Controleer e-mailadres en wachtwoord.'); else $('aPass').value = '';
+    };
+    $('aOut').onclick = () => sb.auth.signOut();
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) kick(); });
+    addEventListener('online', kick);
+    setInterval(() => { if (!document.hidden) sync(); }, 60000);
+  }
+  set(sb ? 'uit' : 'geen');
+  return { kick };
+})();
+$('bSync').onclick = openDrawer;
+if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js');
 
 addEventListener('pagehide', flush);
 document.addEventListener('visibilitychange', () => { if (document.hidden) flush(); });

@@ -4,13 +4,20 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Mindmap</title>
+<meta name="theme-color" content="#2563eb">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <header id="top">
   <button id="bMenu" title="Mijn mindmaps" aria-label="Mijn mindmaps">☰</button>
   <h1 id="title"></h1>
-  <button id="bUndo" title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
+  <button id="bSync" aria-label="Synchronisatie en account">☁</button>
+  <button id="bUndo"title="Ongedaan maken (Ctrl+Z)" aria-label="Ongedaan maken">↶</button>
   <button id="bRedo" title="Opnieuw (Ctrl+Y)" aria-label="Opnieuw">↷</button>
   <button id="bOut" title="Uitzoomen" aria-label="Uitzoomen">−</button>
   <button id="bIn" title="Inzoomen" aria-label="Inzoomen">+</button>
@@ -32,6 +39,15 @@
   <h2>Mijn mindmaps</h2>
   <button id="dNew" class="primary">+ Nieuwe mindmap</button>
   <ul id="dList"></ul>
+  <section id="acct">
+    <p id="aStatus"></p>
+    <form id="aForm">
+      <input id="aMail" type="email" autocomplete="username" placeholder="E-mailadres" aria-label="E-mailadres" required>
+      <input id="aPass" type="password" autocomplete="current-password" placeholder="Wachtwoord" aria-label="Wachtwoord" required>
+      <button class="primary">Inloggen</button>
+    </form>
+    <button id="aOut" hidden>Uitloggen</button>
+  </section>
   <div class="foot">
     <button id="dExport">Back-up opslaan</button>
     <button id="dImport">Back-up openen</button>
@@ -39,6 +55,8 @@
   </div>
 </aside>
 <div id="ghost" hidden></div>
+<script src="supabase.js"></script>
+<script src="config.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -14,6 +14,17 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
+#bSync { position: relative; }
+#bSync::after { content: ""; position: absolute; right: 5px; top: 5px; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
+#bSync[data-s="ok"]::after { background: #2f9e6b; }
+#bSync[data-s="offline"]::after { background: #f08c1a; }
+#bSync[data-s="fout"]::after { background: var(--danger); }
+#acct { border-top: 1px solid var(--line); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+#aStatus { margin: 0; color: var(--muted); font-size: 13px; overflow-wrap: anywhere; }
+#aForm { display: flex; flex-direction: column; gap: 8px; }
+input { font: inherit; font-size: 16px; color: var(--text); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; min-height: 40px; width: 100%; }
 html, body { height: 100%; margin: 0; }
 body {
   display: flex; flex-direction: column; height: 100dvh; overflow: hidden;
