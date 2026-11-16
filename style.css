@@ -215,3 +215,23 @@ body.home .mapOnly { display: none !important; }
 html { overflow: hidden; }
 body { position: fixed; inset: 0; height: auto; }
 .key + .key { border-top: 1px solid var(--line); padding-top: 12px; }
+
+/* Whiteboard: losse elementen op het doek */
+.item { position: absolute; z-index: 1; display: flex; align-items: center; justify-content: center; padding: 8px 10px;
+  text-align: center; cursor: move; color: #1c2330; }
+.item .txt { width: 100%; }
+.item.note { background: var(--c); border-radius: 3px; box-shadow: 0 2px 6px rgba(0, 0, 0, .22); }
+.item.rect, .item.oval { z-index: -1; color: var(--text); border: 2px solid var(--e); border-radius: 8px;
+  background: color-mix(in srgb, var(--c) 45%, var(--surface)); }
+.item.oval { border-radius: 50%; }
+.item.text { color: var(--text); padding: 2px 4px; }
+.item.sel { outline: 2px solid var(--accent); outline-offset: 3px; }
+.grip { display: none; position: absolute; right: -11px; bottom: -11px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); border: 2px solid var(--surface); cursor: nwse-resize; }
+.grip::after { content: ""; position: absolute; inset: -10px; }
+.item.sel .grip { display: block; }
+#board { display: flex; gap: 8px; align-items: center; overflow-x: auto; padding: 6px 16px;
+  background: var(--surface); border-top: 1px solid var(--line); }
+#wColors { flex-wrap: nowrap; padding: 4px; }
+#wColors button { min-width: 30px; min-height: 30px; border-radius: 50%; }
+#tBoard.on { border-color: var(--accent); color: var(--accent); }

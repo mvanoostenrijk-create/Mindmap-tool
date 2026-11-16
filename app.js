@@ -76,7 +76,13 @@ const HG = 52, VG = 12;
 let map = null, sel = null, editing = null, editOrig = '';
 let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
-let selLink = null, linking = null;   // geselecteerde verbinding; tak van waaruit een verbinding wordt getrokken
+let selLink = null, linking = null;
+// Whiteboard: losse elementen op het doek, `map.items = [{id,kind,x,y,w,h,text,color?}]` met kind note/rect/oval/text.
+let selItem = null, boardOpen = false, lay = 0;
+const iels = new Map();
+const ICOL = [{ f: '#fff3a3', e: '#c9a700' }, { f: '#ffd0d0', e: '#d9534f' }, { f: '#cfe9ff', e: '#3b82c4' }, { f: '#d5f5d0', e: '#3f9e56' }, { f: '#ead7ff', e: '#8b5cf6' }, { f: '#ffe0b8', e: '#e08a1e' }, { f: '#e5e7eb', e: '#6b7280' }];
+const item = id => map?.items?.find(i => i.id === id);
+const has = id => info.has(id) || !!item(id);   // tak of whiteboard-element   // geselecteerde verbinding; tak van waaruit een verbinding wordt getrokken
 const els = new Map(), geo = new Map();
 let info = new Map();
 let uidN = 0;
@@ -91,7 +97,7 @@ function index() {
     for (const c of n.children)
       walk(c, n, depth + 1, depth ? side : (c.side || 'right'), c.color ?? (depth ? color : 0), visible && (!n.collapsed || !depth));
   })(map.root, null, 0, null, 0, true);
-  if (map.links) map.links = map.links.filter(l => info.has(l.a) && info.has(l.b));
+  if (map.links) map.links = map.links.filter(l => has(l.a) && has(l.b));
 }
 function touch() {
   map.updated = Date.now();
@@ -100,7 +106,7 @@ function touch() {
   saveTimer = setTimeout(flush, 300);
 }
 function flush() { clearTimeout(saveTimer); saveTimer = 0; if (map) { store.keep(map); store.save(map); } }
-const snapshot = () => JSON.stringify({ root: map.root, links: map.links || [] });
+const snapshot = () => JSON.stringify({ root: map.root, links: map.links || [], items: map.items || [] });
 function snap() { undo.push(snapshot()); if (undo.length > 100) undo.shift(); redo = []; }
 function change(fn) { snap(); fn(); touch(); render(); }
 function timeTravel(from, to) {
@@ -109,7 +115,8 @@ function timeTravel(from, to) {
   to.push(snapshot());
   Object.assign(map, JSON.parse(from.pop()));
   index();
-  if (!info.has(sel)) sel = map.root.id;
+  if (selItem && !item(selItem)) selItem = null;
+  if (!selItem && !info.has(sel)) sel = map.root.id;
   touch(); render();
 }
 const nextColor = () => map.root.children.reduce((m, c) => Math.max(m, (c.color || 0) + 1), 0);
@@ -127,6 +134,7 @@ const countAll = n => n.children.reduce((a, c) => a + 1 + countAll(c), 0);
 
 function render() {
   index();
+  if (selItem && !item(selItem)) selItem = null;
   const th = theme(); COLORS = th.pal.c; world.dataset.style = th.style; world.style.setProperty('--rootc', th.pal.root);
   for (const [id, i] of info) {
     if (!i.visible) continue;
@@ -151,8 +159,22 @@ function render() {
     tog.title = n.collapsed ? 'Uitklappen' : 'Inklappen';
   }
   for (const [id, el] of els) if (!info.get(id)?.visible) { el.remove(); els.delete(id); }
-  layout(); ui();
+  drawItems(); layout(); ui();
 }
+function drawItems() {
+  const list = map.items || [];
+  for (const it of list) {
+    let el = iels.get(it.id);
+    if (!el) { el = document.createElement('div'); el.dataset.id = it.id; el.innerHTML = '<span class="txt"></span><i class="grip"></i>'; world.appendChild(el); iels.set(it.id, el); }
+    el.className = 'item ' + it.kind + (it.id === selItem ? ' sel' : '');
+    const c = ICOL[(it.color || 0) % ICOL.length];
+    Object.assign(el.style, { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px', minHeight: it.h + 'px' });
+    el.style.setProperty('--c', c.f); el.style.setProperty('--e', c.e);
+    if (it.id !== editing && el.firstChild.textContent !== it.text) el.firstChild.textContent = it.text;
+  }
+  for (const [id, el] of iels) if (!list.some(i => i.id === id)) { el.remove(); iels.delete(id); }
+}
+const layoutSoon = () => { lay ||= requestAnimationFrame(() => { lay = 0; if (map) layout(); }); };
 
 // Boomindeling: midden op (0,0), takken links en rechts. size(node) geeft {w,h}; ook gebruikt voor de miniaturen in het overzicht.
 function arrange(root, size, hg, vg) {
@@ -192,6 +214,7 @@ function linkShape(A, B) {
 function layout() {
   geo.clear();
   for (const [k, v] of arrange(map.root, n => { const el = els.get(n.id); return { w: el.offsetWidth, h: el.offsetHeight }; }, HG, VG)) geo.set(k, v);
+  for (const it of map.items || []) { const el = iels.get(it.id); if (el) geo.set(it.id, { x: it.x, y: it.y, w: el.offsetWidth, h: el.offsetHeight, dir: 0 }); }
   const kind = theme().edge;
   let d = '';
   for (const [id, el] of els) {
@@ -220,6 +243,7 @@ function ui() {
   document.title = map.title + ' · Mindmap';
   const i = sel && info.get(sel);
   $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
+  if (selItem) $('tEdit').disabled = false;
   const n = i && i.node;
   $('peek').hidden = !(linking || n && (n.note || n.link || n.files?.length));
   $('peekFiles').replaceChildren(...(linking || !n ? [] : n.files || []).map(f => {
@@ -228,11 +252,15 @@ function ui() {
     return b;
   }));
   $('peekLink').hidden = !!linking || !(n && n.link);
-  $('peekNote').textContent = linking ? 'Tik op de tak waarmee je wilt verbinden. Esc of een tik op de achtergrond annuleert.' : n && n.note || '';
+  $('peekNote').textContent = linking ? 'Tik op de tak of het element waarmee je wilt verbinden. Esc of een tik op de achtergrond annuleert.' : n && n.note || '';
   if (n && n.link) { $('peekLink').href = n.link; $('peekLink').textContent = '🔗 ' + n.link.replace(/^https?:\/\//, '').slice(0, 40); }
   $('tSib').disabled = $('tDel').disabled = !i || !i.parent;
-  if (selLink) $('tDel').disabled = false;
-  $('tLink').disabled = !i; $('tLink').textContent = linking ? 'Kies doel…' : 'Verbind';
+  if (selLink || selItem) $('tDel').disabled = false;
+  const si = item(selItem);
+  $('board').hidden = !(boardOpen || si); $('tBoard').classList.toggle('on', boardOpen);
+  $('wColors').hidden = !si || si.kind === 'text';
+  [...$('wColors').children].forEach((b, k) => b.classList.toggle('on', !!si && (si.color || 0) === k));
+  $('tLink').disabled = !i && !si; $('tLink').textContent = linking ? 'Kies doel…' : 'Verbind';
   $('tFold').disabled = !i || !i.parent || !i.node.children.length;
   $('bUndo').disabled = !undo.length; $('bRedo').disabled = !redo.length;
 }
@@ -261,14 +289,16 @@ function ensureVisible(id) {
   if (t < m) view.y += m - t; else if (b > Hh - m) view.y -= b - (Hh - m);
   applyView();
 }
-function select(id) { if (sel === id && !selLink && !linking) return; selLink = linking = null; sel = id; render(); if (id) ensureVisible(id); }
+function selectItem(id) { selLink = linking = sel = null; selItem = id; render(); }
+function select(id) { if (sel === id && !selLink && !linking && !selItem) return; selLink = linking = selItem = null; sel = id; render(); if (id) ensureVisible(id); }
 
 /* ---------- Bewerken ---------- */
 function startEdit(id, all = true) {
   commitEdit();
-  sel = id; render(); ensureVisible(id);
-  const t = els.get(id).firstChild;
-  editing = id; editOrig = info.get(id).node.text;
+  if (item(id)) { sel = null; selItem = id; } else { sel = id; selItem = null; }
+  render(); ensureVisible(id);
+  const t = (els.get(id) || iels.get(id)).firstChild;
+  editing = id; editOrig = (info.get(id)?.node || item(id)).text;
   t.contentEditable = 'true';
   try { t.contentEditable = 'plaintext-only'; } catch {}
   t.focus();
@@ -277,17 +307,18 @@ function startEdit(id, all = true) {
 }
 function commitEdit(cancel) {
   if (!editing) return;
-  const id = editing, t = els.get(id)?.firstChild, n = info.get(id)?.node;
+  const id = editing, t = (els.get(id) || iels.get(id))?.firstChild, n = info.get(id)?.node || item(id);
   editing = null;
   if (t && n) {
     const v = cancel ? editOrig : t.innerText.replace(/ /g, ' ').trim();
     t.contentEditable = 'false'; t.blur();
     if (v !== n.text) { snap(); n.text = v; touch(); }
+    if (!n.text && n.kind === 'text') { map.items = map.items.filter(i => i !== n); touch(); }   // lege losse tekst is onzichtbaar: weg ermee
     t.textContent = n.text;
   }
   render();
 }
-world.addEventListener('focusout', e => { if (editing && e.target.closest?.('.node')?.dataset.id === editing) commitEdit(); });
+world.addEventListener('focusout', e => { if (editing && e.target.closest?.('.node,.item')?.dataset.id === editing) commitEdit(); });
 world.addEventListener('input', () => { if (editing) layout(); });
 
 function addChild(pid = sel || map.root.id) {
@@ -313,6 +344,7 @@ function addSibling() {
 function removeSel() {
   commitEdit();
   if (selLink) { change(() => { map.links = map.links.filter(l => l.id !== selLink); selLink = null; }); return; }
+  if (selItem) { change(() => { map.items = map.items.filter(i => i.id !== selItem); selItem = null; }); return; }
   const i = sel && info.get(sel);
   if (!i?.parent) return;
   const arr = i.parent.children, k = arr.indexOf(i.node);
@@ -342,23 +374,26 @@ let g = null, lastTap = { id: null, t: 0 };
 
 canvas.addEventListener('pointerdown', e => {
   if (e.pointerType === 'mouse' && e.button !== 0) return;
-  const nodeEl = e.target.closest('.node');
-  if (editing) { if (nodeEl?.dataset.id === editing) return; commitEdit(); }
+  const nodeEl = e.target.closest('.node'), itemEl = e.target.closest('.item');
+  if (editing) { if ((nodeEl || itemEl)?.dataset.id === editing) return; commitEdit(); }
   if (e.target.closest('.tog')) return;
   const hit = e.target.closest('[data-link]');
-  if (hit) { linking = null; sel = null; selLink = hit.dataset.link; render(); return; }
+  if (hit) { linking = null; sel = selItem = null; selLink = hit.dataset.link; render(); return; }
   pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
   canvas.setPointerCapture(e.pointerId);
   if (pts.size === 2) { endDrag(); world.classList.add('moving'); g = { type: 'pinch', ...pinchState() }; return; }
   if (pts.size > 2) return;
-  const id = nodeEl?.dataset.id;
+  const it = itemEl && item(itemEl.dataset.id), id = nodeEl?.dataset.id || it?.id;
   if (id && linking) {
     const a = linking; linking = null;
-    if (a !== id && info.has(a) && !(map.links || []).some(l => l.a === a && l.b === id)) change(() => { (map.links ||= []).push({ id: uid(), a, b: id }); });
+    if (a !== id && has(a) && !(map.links || []).some(l => l.a === a && l.b === id)) change(() => { (map.links ||= []).push({ id: uid(), a, b: id }); });
     else render();
     return;
   }
-  if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
+  if (it) {
+    if (selItem !== it.id) selectItem(it.id);
+    g = { type: e.target.closest('.grip') ? 'size' : 'item', it, x0: e.clientX, y0: e.clientY, ix: it.x, iy: it.y, w0: it.w, h0: it.h, moved: false };
+  } else if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
   else g = { type: 'pan', x0: e.clientX, y0: e.clientY, vx: view.x, vy: view.y, moved: false };
 });
 
@@ -380,6 +415,12 @@ canvas.addEventListener('pointermove', e => {
     if (!g.moved && Math.hypot(dx, dy) < 5) return;
     if (!g.moved) world.classList.add('moving');
     g.moved = true; view.x = g.vx + dx; view.y = g.vy + dy; applyView();
+  } else if (g.type === 'item' || g.type === 'size') {
+    if (!g.moved) { if (Math.hypot(dx, dy) < 5) return; g.moved = true; snap(); }
+    const it = g.it, s = view.s;
+    if (g.type === 'item') { it.x = Math.round(g.ix + dx / s); it.y = Math.round(g.iy + dy / s); }
+    else { it.w = Math.max(60, Math.round(g.w0 + dx / s)); it.h = Math.max(24, Math.round(g.h0 + dy / s)); }
+    drawItems(); layoutSoon();
   } else if (g.type === 'node') {
     if (!g.moved) {
       if (Math.hypot(dx, dy) < 8 || g.id === map.root.id) return;
@@ -416,6 +457,12 @@ function pointerEnd(e, cancelled) {
   if (!was) return;
   if (was.type === 'pinch') { if (pts.size < 2) g = null; return; }
   endDrag(); g = null;
+  if (was.type === 'item' || was.type === 'size') {
+    if (was.moved) { touch(); render(); return; }
+    const now = Date.now(), id = was.it.id;
+    if (!cancelled && lastTap.id === id && now - lastTap.t < 400) { lastTap.id = null; startEdit(id, false); } else lastTap = { id, t: now };
+    return;
+  }
   if (cancelled) return;
   if (was.type === 'pan') { if (!was.moved) select(null); return; }
   if (was.moved) { if (was.drop) moveNode(was.id, was.drop.id, was.drop.mode, was.drop.side); return; }
@@ -453,7 +500,7 @@ document.addEventListener('keydown', e => {
   if (editing) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     else if (e.key === 'Escape') { e.preventDefault(); commitEdit(true); }
-    else if (e.key === 'Tab') { e.preventDefault(); const id = editing; commitEdit(); addChild(id); }
+    else if (e.key === 'Tab') { e.preventDefault(); const id = editing; commitEdit(); if (info.has(id)) addChild(id); }
     return;
   }
   const mod = e.ctrlKey || e.metaKey, k = e.key;
@@ -462,6 +509,15 @@ document.addEventListener('keydown', e => {
   if (mod || e.altKey) return;
   if (k === 'Escape' && (linking || selLink)) { linking = selLink = null; render(); return; }
   if (selLink && (k === 'Delete' || k === 'Backspace')) { e.preventDefault(); return removeSel(); }
+  if (selItem) {
+    const it = item(selItem), d = e.shiftKey ? 1 : 10;
+    if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); removeSel(); }
+    else if (k === 'F2' || k === 'Enter') { e.preventDefault(); startEdit(selItem, false); }
+    else if (k === 'Escape') select(null);
+    else if (k.startsWith('Arrow')) { e.preventDefault(); change(() => { it.x += ((k === 'ArrowRight') - (k === 'ArrowLeft')) * d; it.y += ((k === 'ArrowDown') - (k === 'ArrowUp')) * d; }); }
+    else if (k.length === 1 && k !== ' ') startEdit(selItem, true);
+    return;
+  }
   if (!sel) { if (k.startsWith('Arrow') || k === 'Tab') { e.preventDefault(); select(map.root.id); } return; }
   if (k === 'Tab' || k === 'Insert') { e.preventDefault(); addChild(); }
   else if (k === 'Enter') { e.preventDefault(); addSibling(); }
@@ -475,10 +531,27 @@ document.addEventListener('keydown', e => {
 /* ---------- Knoppen ---------- */
 $('tChild').onclick = () => addChild();
 $('tSib').onclick = addSibling;
-$('tEdit').onclick = () => sel && startEdit(sel, false);
+$('tEdit').onclick = () => (sel || selItem) && startEdit(sel || selItem, false);
 $('tFold').onclick = () => toggle();
 $('tDel').onclick = removeSel;
-$('tLink').onclick = () => { commitEdit(); if (!sel) return; linking = linking ? null : sel; selLink = null; render(); };
+$('tLink').onclick = () => { commitEdit(); const from = sel || selItem; if (!from) return; linking = linking ? null : from; selLink = null; render(); };
+/* ---------- Whiteboard: balk met elementen en kleuren (hier opgebouwd, zodat een oudere pagina uit de cache niet stukgaat) ---------- */
+function addItem(kind) {
+  commitEdit();
+  const r = canvas.getBoundingClientRect(), [w, h] = { note: [150, 110], rect: [220, 140], oval: [180, 120], text: [180, 30] }[kind], k = (map.items || []).length % 5 * 16;
+  const it = { id: uid(), kind, text: '', w, h, x: Math.round((r.width / 2 - view.x) / view.s - w / 2 + k), y: Math.round((r.height / 2 - view.y) / view.s - h / 2 + k) };
+  change(() => { (map.items ||= []).push(it); });
+  startEdit(it.id);
+}
+{
+  const mk = (tag, id, text, title) => Object.assign(document.createElement(tag), { id, textContent: text || '', title: title || '' });
+  const bar = mk('div', 'board'), tb = mk('button', 'tBoard', '▦ Whiteboard', 'Plaknotities, vormen en losse tekst vrij op het doek');
+  bar.hidden = true; $('tools').before(bar); $('tLink').after(tb);
+  tb.onclick = () => { boardOpen = !boardOpen; ui(); };
+  for (const [kind, label] of [['note', '+ Plaknotitie'], ['rect', '+ Rechthoek'], ['oval', '+ Ellips'], ['text', '+ Tekst']]) { const b = mk('button', '', label); b.onclick = () => addItem(kind); bar.append(b); }
+  const cols = mk('span', 'wColors'); cols.className = 'chips'; bar.append(cols);
+  ICOL.forEach((c, k) => { const b = mk('button', '', '', 'Kleur'); b.style.background = c.f; b.onclick = () => { const it = item(selItem); if (it) change(() => { it.color = k; }); }; cols.append(b); });
+}
 $('bUndo').onclick = () => timeTravel(undo, redo);
 $('bRedo').onclick = () => timeTravel(redo, undo);
 $('bIn').onclick = () => zoomCenter(1.25);
@@ -489,11 +562,11 @@ $('bFit').onclick = fit;
 async function openMap(m) {
   commitEdit(); flush();
   map = m; undo = []; redo = []; sel = m.root.id;
-  for (const el of els.values()) el.remove();
-  els.clear();
+  for (const el of [...els.values(), ...iels.values()]) el.remove();
+  els.clear(); iels.clear();
   store.setLast(m.id);
   document.body.classList.remove('home');
-  selLink = linking = null;
+  selLink = linking = selItem = null;
   if (location.hash !== '#m=' + m.id) history.pushState(null, '', '#m=' + m.id);
   render(); fit();
   todoist.refresh();
@@ -772,8 +845,22 @@ function drawCanvas() {
   const x = cv.getContext('2d'), FONT = 'px system-ui, -apple-system, "Segoe UI", sans-serif';
   x.scale(k, k); x.fillStyle = '#fff'; x.fillRect(0, 0, W, H); x.translate(M - a, M - b);
   x.lineCap = x.lineJoin = 'round'; x.textBaseline = 'middle';
+  const drawItem = it => {
+    const g = geo.get(it.id), el = iels.get(it.id); if (!g || !el) return;
+    const c = ICOL[(it.color || 0) % ICOL.length];
+    x.beginPath();
+    if (it.kind === 'oval') x.ellipse(g.x + g.w / 2, g.y + g.h / 2, g.w / 2 - 1, g.h / 2 - 1, 0, 0, 7); else x.roundRect(g.x + 1, g.y + 1, g.w - 2, g.h - 2, it.kind === 'note' ? 3 : 8);
+    if (it.kind === 'note') { x.fillStyle = c.f; x.fill(); }
+    else if (it.kind !== 'text') { x.fillStyle = '#fff'; x.fill(); x.globalAlpha = 0.45; x.fillStyle = c.f; x.fill(); x.globalAlpha = 1; x.lineWidth = 2; x.strokeStyle = c.e; x.stroke(); }
+    const cs = getComputedStyle(el), fs = parseFloat(cs.fontSize), lh = fs * 1.35, t = el.firstChild;
+    x.font = cs.fontWeight + ' ' + fs + FONT; x.fillStyle = '#1c2330'; x.textAlign = 'center';
+    textLines(el).forEach((s, j) => x.fillText(s, g.x + el.clientLeft + t.offsetLeft + t.offsetWidth / 2, g.y + el.clientTop + t.offsetTop + (j + 0.5) * lh));
+    x.textAlign = 'left';
+  };
+  const under = it => it.kind === 'rect' || it.kind === 'oval';   // vormen liggen achter de mindmap, notities en tekst erboven
+  for (const it of map.items || []) if (under(it)) drawItem(it);
   for (const [id, p] of geo) {
-    const i = info.get(id); if (!i.parent) continue;
+    const i = info.get(id); if (!i?.parent) continue;
     x.lineWidth = 2; x.strokeStyle = COLORS[i.color % COLORS.length];
     x.stroke(new Path2D(edgePath(...edgeEnds(p, geo.get(i.parent.id)), th.edge)));
   }
@@ -805,6 +892,7 @@ function drawCanvas() {
     x.globalAlpha = 1;
     if (el.dataset.due) { x.font = '400 11' + FONT; x.fillStyle = '#667085'; x.fillText(el.dataset.due, px, py + L.length * lh + 7.5); }
   }
+  for (const it of map.items || []) if (!under(it)) drawItem(it);
   return cv;
 }
 function canvasBytes(cv, type) {
@@ -846,6 +934,8 @@ function outline() {
       walk(c, depth + 1);
     }
   })(map.root, 0);
+  const loose = (map.items || []).filter(i => i.text.trim());
+  if (loose.length) s += '\n## Whiteboard\n\n' + loose.map(i => '- ' + flat(i.text) + '\n').join('');
   return s;
 }
 $('xPng').onclick = () => { closeDrawer(); deliver(new Blob([canvasBytes(drawCanvas(), 'image/png')], { type: 'image/png' }), fileBase() + '.png'); };
