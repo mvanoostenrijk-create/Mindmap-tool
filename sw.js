@@ -1,5 +1,5 @@
 // Maakt de app offline bruikbaar. Online altijd de nieuwste versie (netwerk eerst), offline uit de cache.
-const CACHE = 'mm-1';
+const CACHE = 'mm-2';
 const SHELL = ['./', 'style.css', 'app.js', 'config.js', 'manifest.webmanifest', 'icon-192.png', 'icon-180.png', 'supabase.js', 'icon-512.png'];
 
 self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())));

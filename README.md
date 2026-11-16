@@ -23,7 +23,12 @@ De app start in het overzicht "Mijn mindmaps". Elke mindmap staat er als kaart m
 | Nieuwe mindmap | Kaart "+ Nieuwe mindmap" |
 | Zoeken op titel | Zoekveld rechtsboven |
 | Mindmap verwijderen | ✕ op de kaart, daarna "Zeker?" |
+| Mindmap in een map zetten | 📁 op de kaart, kies een map of "Nieuwe map…" |
+| Eén map bekijken | Knoppen boven de kaarten: "Alle", per map, "Zonder map" |
+| Map hernoemen of opheffen | Kies de map, daarna ✎. Een lege naam heft de map op; de mindmaps blijven bestaan |
 | Terug naar het overzicht | ⌂ linksboven in een mindmap, of de terug-knop van de browser |
+
+Een map bestaat zolang er minstens één mindmap in zit; mappen in mappen kan niet. Een nieuwe of geïmporteerde mindmap komt in de map die je op dat moment bekijkt. Zoeken gaat altijd door alle mappen. De indeling synchroniseert mee naar je andere apparaten.
 
 Elke mindmap heeft een eigen adres. Je kunt er een bladwijzer van maken.
 
