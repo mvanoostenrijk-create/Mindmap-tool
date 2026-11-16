@@ -99,6 +99,28 @@ Een verbinding is een gestippelde pijl tussen twee takken die niet onder elkaar 
 
 Zit een van de twee takken in een ingeklapt deel, dan is de pijl tijdelijk onzichtbaar.
 
+## Whiteboard
+
+Naast de takken kun je losse elementen vrij op het doek zetten. Tik onderin op "▦ Whiteboard" om de balk met elementen te tonen.
+
+| Wat | Hoe |
+|---|---|
+| Element toevoegen | "+ Plaknotitie", "+ Rechthoek", "+ Ellips" of "+ Tekst"; het verschijnt midden in beeld en je kunt direct typen |
+| Verplaatsen | Slepen, of met de pijltjestoetsen (Shift = kleine stapjes) |
+| Groter of kleiner maken | Sleep het blauwe bolletje rechtsonder aan het geselecteerde element |
+| Tekst wijzigen | Dubbelklik of dubbeltik, F2 of "Bewerk". Enter is klaar, Shift+Enter een nieuwe regel |
+| Kleur kiezen | Selecteer het element en tik op een kleur in de balk |
+| Pijl trekken | Selecteer een element of tak, tik op "Verbind" en daarna op het doel (element of tak) |
+| Verwijderen | Selecteer het element, daarna Delete of "Verwijder" |
+| Meerdere elementen selecteren | Met de muis: Shift ingedrukt houden en elementen aanklikken, of met Shift een kader over de achtergrond slepen. Op een aanraakscherm: zet "☑ Meerdere" aan in de balk en tik de elementen aan of sleep een kader |
+| Groep verplaatsen, kleuren of verwijderen | Sleep één van de geselecteerde elementen, gebruik de pijltjestoetsen, kies een kleur of druk op Delete |
+
+Rechthoeken en ellipsen liggen achter de mindmap, zodat je ze als kader om een groep takken kunt leggen. Plaknotities en losse tekst liggen erboven. De mindmap zelf blijft automatisch ingedeeld en schuift dus niet opzij voor je elementen: groeit een tak eronder door, versleep het element dan.
+
+Meervoudig selecteren geldt alleen voor whiteboard-elementen: takken van de mindmap worden automatisch ingedeeld en doen niet mee. Een tik op één element zonder Shift of "Meerdere" maakt de selectie weer enkelvoudig.
+
+Whiteboard-elementen synchroniseren mee, zitten in de back-up en komen in de export als afbeelding en PDF. In de tekstexport staan hun teksten onder het kopje "Whiteboard".
+
 ## Claude denkt mee
 
 **Eenmalig, per apparaat:** maak een account op console.anthropic.com, zet er tegoed op, maak een API-sleutel aan en plak die in de app onder ☰ → "Claude API-sleutel". Dit staat los van een Claude-abonnement: je betaalt per vraag.
