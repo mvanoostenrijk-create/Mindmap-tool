@@ -508,6 +508,7 @@ function replaceMap(m) {   // nieuwere versie van de open mindmap kwam binnen va
 function newMap() {
   const text = FRESH;
   const m = { id: uid(), title: text, updated: Date.now(), root: { id: uid(), text, children: [] } };
+  if (folder) m.folder = folder;
   store.save(m);
   return openMap(m);
 }
@@ -528,20 +529,56 @@ function miniSvg(m) {
   })(m.root, null, 0);
   return `<svg viewBox="${a - 4} ${b - 4} ${c - a + 8} ${d - b + 8}"><g fill="none" stroke-width="1.5">${lines}</g>${boxes}</svg>`;
 }
+// Mappen: de naam staat in de mindmap zelf (`map.folder`, synct mee). Een map bestaat zolang er een mindmap in zit.
+let folder = null;   // gekozen map in het overzicht: null = alles, '' = zonder map, anders de naam
+async function setFolder(ids, name) {
+  for (const id of ids) {
+    const m = map?.id === id ? map : await store.load(id); if (!m) continue;
+    name ? m.folder = name : delete m.folder;
+    m.updated = Date.now(); await store.save(m);
+  }
+  drawList();
+}
+const askFolder = was => (prompt(was ? 'Nieuwe naam voor de map (leeg = map opheffen, de mindmaps blijven bestaan)' : 'Naam van de nieuwe map', was || '') ?? was ?? '').trim().slice(0, 40);
 async function drawList() {
-  const grid = $('pGrid'), q = $('pSearch').value.trim().toLowerCase(), cards = [];
+  const grid = $('pGrid'), q = $('pSearch').value.trim().toLowerCase(), cards = [], all = [];
+  for (const it of await store.list()) { const m = await store.load(it.id); if (m) all.push(m); }
+  const names = [...new Set(all.map(m => m.folder).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'nl'));
+  if (folder && !names.includes(folder) || folder === '' && !names.length) folder = null;
+  const bar = [], chip = (label, val, n) => {
+    const b = document.createElement('button');
+    b.textContent = `${label} (${n})`; b.className = folder === val ? 'on' : '';
+    b.onclick = () => { folder = val; drawList(); }; bar.push(b);
+  };
+  if (names.length) {
+    chip('Alle', null, all.length);
+    for (const f of names) chip('📁 ' + f, f, all.filter(m => m.folder === f).length);
+    const loose = all.filter(m => !m.folder).length;
+    if (loose) chip('Zonder map', '', loose);
+    if (folder) {
+      const b = document.createElement('button');
+      b.textContent = '✎'; b.title = 'Map hernoemen of opheffen';
+      b.onclick = () => { const was = folder, name = askFolder(was); if (name === was) return; folder = name || null; setFolder(all.filter(m => m.folder === was).map(m => m.id), name); };
+      bar.push(b);
+    }
+  }
+  $('pFolders').replaceChildren(...bar);
   const add = document.createElement('button');
-  add.className = 'card new'; add.textContent = '+ Nieuwe mindmap'; add.onclick = newMap; cards.push(add);
-  for (const it of await store.list()) {
-    if (q && !it.title.toLowerCase().includes(q)) continue;
-    const m = await store.load(it.id); if (!m) continue;
+  add.className = 'card new'; add.textContent = '+ Nieuwe mindmap' + (folder ? ` in "${folder}"` : ''); add.onclick = newMap; cards.push(add);
+  for (const m of all) {
+    const it = m;
+    if (q ? !m.title.toLowerCase().includes(q) : folder !== null && (m.folder || '') !== folder) continue;   // zoeken gaat door alle mappen
     const card = document.createElement('article'), n = countAll(m.root);
     card.className = 'card'; card.tabIndex = 0;
-    card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><button class="del" title="Verwijderen">✕</button>`;
+    card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><label class="fold" title="Verplaatsen naar map">📁<select aria-label="Verplaatsen naar map"></select></label><button class="del" title="Verwijderen">✕</button>`;
     card.querySelector('h3').textContent = m.title;
-    card.querySelector('p').textContent = `${n} ${n === 1 ? 'tak' : 'takken'} · ${when(m.updated)}`;
+    card.querySelector('p').textContent = (m.folder && (q || folder === null) ? `📁 ${m.folder} · ` : '') + `${n} ${n === 1 ? 'tak' : 'takken'} · ${when(m.updated)}`;
+    const pick = card.querySelector('select');
+    pick.append(new Option('Geen map', ''), ...names.map(f => new Option(f, f)), new Option('Nieuwe map…', '\n'));
+    pick.value = m.folder || '';
+    pick.onchange = () => { const name = pick.value === '\n' ? askFolder() : pick.value; if (name === (m.folder || '')) return drawList(); setFolder([m.id], name); };
     const go = async () => openMap(await store.load(it.id) || m), del = card.querySelector('.del');
-    card.onclick = e => { if (!e.target.closest('.del')) go(); };
+    card.onclick = e => { if (!e.target.closest('.del,.fold')) go(); };
     card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) go(); };
     del.onclick = async () => {
       if (del.textContent === '✕') { del.textContent = 'Zeker?'; return; }
@@ -661,6 +698,7 @@ async function importFiles(files) {
           }
         }
         m.id = newId; m.title = m.root.text.trim() || 'Naamloos'; m.updated = Date.now();
+        if (folder) m.folder = folder;
         await store.save(m); ok++;
       }
     } catch (e) { console.warn('import', f.name, e); bad.push(f.name); }
