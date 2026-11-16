@@ -78,8 +78,10 @@ let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
 let selLink = null, linking = null;
 // Whiteboard: losse elementen op het doek, `map.items = [{id,kind,x,y,w,h,text,color?}]` met kind note/rect/oval/text.
-let selItem = null, boardOpen = false, lay = 0;
-const iels = new Map();
+let selItem = null, boardOpen = false, lay = 0, multiMode = false;
+const more = new Set();   // bij meervoudige selectie: alle gekozen elementen (selItem is dan het laatst gekozene)
+const picks = () => more.size ? [...more] : selItem ? [selItem] : [];
+const iels = new Map(), lasso = document.createElement('div');
 const ICOL = [{ f: '#fff3a3', e: '#c9a700' }, { f: '#ffd0d0', e: '#d9534f' }, { f: '#cfe9ff', e: '#3b82c4' }, { f: '#d5f5d0', e: '#3f9e56' }, { f: '#ead7ff', e: '#8b5cf6' }, { f: '#ffe0b8', e: '#e08a1e' }, { f: '#e5e7eb', e: '#6b7280' }];
 const item = id => map?.items?.find(i => i.id === id);
 const has = id => info.has(id) || !!item(id);   // tak of whiteboard-element   // geselecteerde verbinding; tak van waaruit een verbinding wordt getrokken
@@ -135,6 +137,8 @@ const countAll = n => n.children.reduce((a, c) => a + 1 + countAll(c), 0);
 function render() {
   index();
   if (selItem && !item(selItem)) selItem = null;
+  for (const id of more) if (!item(id)) more.delete(id);
+  if (!selItem || more.size < 2) more.clear();
   const th = theme(); COLORS = th.pal.c; world.dataset.style = th.style; world.style.setProperty('--rootc', th.pal.root);
   for (const [id, i] of info) {
     if (!i.visible) continue;
@@ -166,7 +170,7 @@ function drawItems() {
   for (const it of list) {
     let el = iels.get(it.id);
     if (!el) { el = document.createElement('div'); el.dataset.id = it.id; el.innerHTML = '<span class="txt"></span><i class="grip"></i>'; world.appendChild(el); iels.set(it.id, el); }
-    el.className = 'item ' + it.kind + (it.id === selItem ? ' sel' : '');
+    el.className = 'item ' + it.kind + (it.id === selItem || more.has(it.id) ? ' sel' : '') + (more.size ? ' many' : '');
     const c = ICOL[(it.color || 0) % ICOL.length];
     Object.assign(el.style, { left: it.x + 'px', top: it.y + 'px', width: it.w + 'px', minHeight: it.h + 'px' });
     el.style.setProperty('--c', c.f); el.style.setProperty('--e', c.e);
@@ -258,7 +262,7 @@ function ui() {
   if (selLink || selItem) $('tDel').disabled = false;
   const si = item(selItem);
   $('board').hidden = !(boardOpen || si); $('tBoard').classList.toggle('on', boardOpen);
-  $('wColors').hidden = !si || si.kind === 'text';
+  $('wColors').hidden = !si || si.kind === 'text' && !more.size; $('wMulti').classList.toggle('on', multiMode);
   [...$('wColors').children].forEach((b, k) => b.classList.toggle('on', !!si && (si.color || 0) === k));
   $('tLink').disabled = !i && !si; $('tLink').textContent = linking ? 'Kies doel…' : 'Verbind';
   $('tFold').disabled = !i || !i.parent || !i.node.children.length;
@@ -289,13 +293,13 @@ function ensureVisible(id) {
   if (t < m) view.y += m - t; else if (b > Hh - m) view.y -= b - (Hh - m);
   applyView();
 }
-function selectItem(id) { selLink = linking = sel = null; selItem = id; render(); }
+function selectItem(id) { selLink = linking = sel = null; more.clear(); selItem = id; render(); }
 function select(id) { if (sel === id && !selLink && !linking && !selItem) return; selLink = linking = selItem = null; sel = id; render(); if (id) ensureVisible(id); }
 
 /* ---------- Bewerken ---------- */
 function startEdit(id, all = true) {
   commitEdit();
-  if (item(id)) { sel = null; selItem = id; } else { sel = id; selItem = null; }
+  if (item(id)) { sel = null; more.clear(); selItem = id; } else { sel = id; selItem = null; }
   render(); ensureVisible(id);
   const t = (els.get(id) || iels.get(id)).firstChild;
   editing = id; editOrig = (info.get(id)?.node || item(id)).text;
@@ -344,7 +348,7 @@ function addSibling() {
 function removeSel() {
   commitEdit();
   if (selLink) { change(() => { map.links = map.links.filter(l => l.id !== selLink); selLink = null; }); return; }
-  if (selItem) { change(() => { map.items = map.items.filter(i => i.id !== selItem); selItem = null; }); return; }
+  if (selItem) { const ids = picks(); change(() => { map.items = map.items.filter(i => !ids.includes(i.id)); selItem = null; }); return; }
   const i = sel && info.get(sel);
   if (!i?.parent) return;
   const arr = i.parent.children, k = arr.indexOf(i.node);
@@ -390,10 +394,18 @@ canvas.addEventListener('pointerdown', e => {
     else render();
     return;
   }
+  const multi = e.shiftKey || e.ctrlKey || e.metaKey || multiMode;
   if (it) {
-    if (selItem !== it.id) selectItem(it.id);
-    g = { type: e.target.closest('.grip') ? 'size' : 'item', it, x0: e.clientX, y0: e.clientY, ix: it.x, iy: it.y, w0: it.w, h0: it.h, moved: false };
-  } else if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
+    let drop = false;   // tik op een al gekozen element in de meervoudige stand haalt het eruit (bij loslaten, als er niet gesleept is)
+    if (multi) {
+      if (!more.size && selItem) more.add(selItem);
+      if (more.has(it.id)) drop = more.size > 1; else more.add(it.id);
+      sel = selLink = linking = null; selItem = it.id; render();
+    } else if (!more.has(it.id) && selItem !== it.id) selectItem(it.id);   // tik op een lid van de groep: groep blijft, zodat je hem kunt verslepen
+    g = { type: e.target.closest('.grip') ? 'size' : 'item', it, x0: e.clientX, y0: e.clientY, w0: it.w, h0: it.h, moved: false, drop, multi,
+      group: picks().map(item).map(o => ({ o, x: o.x, y: o.y })) };
+  } else if (!id && multi) { g = { type: 'box', x0: e.clientX, y0: e.clientY, moved: false }; }
+  else if (id) { select(id); g = { type: 'node', id, x0: e.clientX, y0: e.clientY, moved: false }; }
   else g = { type: 'pan', x0: e.clientX, y0: e.clientY, vx: view.x, vy: view.y, moved: false };
 });
 
@@ -418,9 +430,13 @@ canvas.addEventListener('pointermove', e => {
   } else if (g.type === 'item' || g.type === 'size') {
     if (!g.moved) { if (Math.hypot(dx, dy) < 5) return; g.moved = true; snap(); }
     const it = g.it, s = view.s;
-    if (g.type === 'item') { it.x = Math.round(g.ix + dx / s); it.y = Math.round(g.iy + dy / s); }
+    if (g.type === 'item') for (const q of g.group) { q.o.x = Math.round(q.x + dx / s); q.o.y = Math.round(q.y + dy / s); }
     else { it.w = Math.max(60, Math.round(g.w0 + dx / s)); it.h = Math.max(24, Math.round(g.h0 + dy / s)); }
     drawItems(); layoutSoon();
+  } else if (g.type === 'box') {
+    g.moved = true;
+    Object.assign(lasso.style, { left: Math.min(g.x0, e.clientX) + 'px', top: Math.min(g.y0, e.clientY) + 'px', width: Math.abs(dx) + 'px', height: Math.abs(dy) + 'px' });
+    lasso.hidden = false;
   } else if (g.type === 'node') {
     if (!g.moved) {
       if (Math.hypot(dx, dy) < 8 || g.id === map.root.id) return;
@@ -460,8 +476,18 @@ function pointerEnd(e, cancelled) {
   if (was.type === 'item' || was.type === 'size') {
     if (was.moved) { touch(); render(); return; }
     const now = Date.now(), id = was.it.id;
+    if (was.drop) { more.delete(id); selItem = [...more].pop() || null; return render(); }
+    if (more.size && !was.multi) selectItem(id);
     if (!cancelled && lastTap.id === id && now - lastTap.t < 400) { lastTap.id = null; startEdit(id, false); } else lastTap = { id, t: now };
     return;
+  }
+  if (was.type === 'box') {   // alles wat het kader raakt komt bij de selectie
+    const b = lasso.getBoundingClientRect(); lasso.hidden = true;
+    if (cancelled || !was.moved) return select(null);
+    if (!more.size && selItem) more.add(selItem);
+    for (const [id, el] of iels) { const r = el.getBoundingClientRect(); if (r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top) more.add(id); }
+    sel = selLink = linking = null; selItem = [...more].pop() || null;
+    return render();
   }
   if (cancelled) return;
   if (was.type === 'pan') { if (!was.moved) select(null); return; }
@@ -510,11 +536,12 @@ document.addEventListener('keydown', e => {
   if (k === 'Escape' && (linking || selLink)) { linking = selLink = null; render(); return; }
   if (selLink && (k === 'Delete' || k === 'Backspace')) { e.preventDefault(); return removeSel(); }
   if (selItem) {
-    const it = item(selItem), d = e.shiftKey ? 1 : 10;
+    const d = e.shiftKey ? 1 : 10;
     if (k === 'Delete' || k === 'Backspace') { e.preventDefault(); removeSel(); }
-    else if (k === 'F2' || k === 'Enter') { e.preventDefault(); startEdit(selItem, false); }
     else if (k === 'Escape') select(null);
-    else if (k.startsWith('Arrow')) { e.preventDefault(); change(() => { it.x += ((k === 'ArrowRight') - (k === 'ArrowLeft')) * d; it.y += ((k === 'ArrowDown') - (k === 'ArrowUp')) * d; }); }
+    else if (k.startsWith('Arrow')) { e.preventDefault(); change(() => { for (const it of picks().map(item)) { it.x += ((k === 'ArrowRight') - (k === 'ArrowLeft')) * d; it.y += ((k === 'ArrowDown') - (k === 'ArrowUp')) * d; } }); }
+    else if (more.size) { /* tekst bewerken kan alleen met één element */ }
+    else if (k === 'F2' || k === 'Enter') { e.preventDefault(); startEdit(selItem, false); }
     else if (k.length === 1 && k !== ' ') startEdit(selItem, true);
     return;
   }
@@ -550,7 +577,10 @@ function addItem(kind) {
   tb.onclick = () => { boardOpen = !boardOpen; ui(); };
   for (const [kind, label] of [['note', '+ Plaknotitie'], ['rect', '+ Rechthoek'], ['oval', '+ Ellips'], ['text', '+ Tekst']]) { const b = mk('button', '', label); b.onclick = () => addItem(kind); bar.append(b); }
   const cols = mk('span', 'wColors'); cols.className = 'chips'; bar.append(cols);
-  ICOL.forEach((c, k) => { const b = mk('button', '', '', 'Kleur'); b.style.background = c.f; b.onclick = () => { const it = item(selItem); if (it) change(() => { it.color = k; }); }; cols.append(b); });
+  ICOL.forEach((c, k) => { const b = mk('button', '', '', 'Kleur'); b.style.background = c.f; b.onclick = () => { const l = picks().map(item); if (l.length) change(() => { for (const it of l) it.color = k; }); }; cols.append(b); });
+  const mb = mk('button', 'wMulti', '☑ Meerdere', 'Meerdere elementen selecteren: tik ze aan of sleep een kader over de achtergrond (met muis ook: Shift ingedrukt houden)');
+  mb.onclick = () => { multiMode = !multiMode; ui(); }; bar.append(mb);
+  document.body.append(Object.assign(lasso, { id: 'lasso', hidden: true }));
 }
 $('bUndo').onclick = () => timeTravel(undo, redo);
 $('bRedo').onclick = () => timeTravel(redo, undo);

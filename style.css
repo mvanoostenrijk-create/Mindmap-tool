@@ -234,4 +234,7 @@ body { position: fixed; inset: 0; height: auto; }
   background: var(--surface); border-top: 1px solid var(--line); }
 #wColors { flex-wrap: nowrap; padding: 4px; }
 #wColors button { min-width: 30px; min-height: 30px; border-radius: 50%; }
-#tBoard.on { border-color: var(--accent); color: var(--accent); }
+#tBoard.on, #wMulti.on { border-color: var(--accent); color: var(--accent); }
+.item.many .grip { display: none; }
+#lasso { position: fixed; z-index: 7; pointer-events: none; border: 1px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, transparent); }
