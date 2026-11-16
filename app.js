@@ -562,7 +562,8 @@ async function drawList() {
       bar.push(b);
     }
   }
-  $('pFolders').replaceChildren(...bar);
+  // de pagina zelf kan nog even een oudere versie uit de cache zijn dan dit script: dan de balk hier aanmaken
+  ($('pFolders') || $('pMsg').before(Object.assign(document.createElement('nav'), { id: 'pFolders' })) || $('pFolders')).replaceChildren(...bar);
   const add = document.createElement('button');
   add.className = 'card new'; add.textContent = '+ Nieuwe mindmap' + (folder ? ` in "${folder}"` : ''); add.onclick = newMap; cards.push(add);
   for (const m of all) {
