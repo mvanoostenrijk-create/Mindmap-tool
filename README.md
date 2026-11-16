@@ -22,6 +22,7 @@ De app start in het overzicht "Mijn mindmaps". Elke mindmap staat er als kaart m
 | Mindmap openen | Klik of tik op de kaart |
 | Nieuwe mindmap | Kaart "+ Nieuwe mindmap" |
 | Zoeken op titel | Zoekveld rechtsboven |
+| Hele naam van een mindmap lezen | Houd de muis even stil op de kaart |
 | Mindmap verwijderen | ✕ op de kaart, daarna "Zeker?" |
 | Mindmap in een map zetten | 📁 op de kaart, kies een map of "Nieuwe map…" |
 | Eén map bekijken | Knoppen boven de kaarten: "Alle", per map, "Zonder map" |

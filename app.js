@@ -572,7 +572,7 @@ async function drawList() {
     const card = document.createElement('article'), n = countAll(m.root);
     card.className = 'card'; card.tabIndex = 0;
     card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><label class="fold" title="Verplaatsen naar map">📁<select aria-label="Verplaatsen naar map"></select></label><button class="del" title="Verwijderen">✕</button>`;
-    card.querySelector('h3').textContent = m.title;
+    card.querySelector('h3').textContent = m.title; card.title = m.title;
     card.querySelector('p').textContent = (m.folder && (q || folder === null) ? `📁 ${m.folder} · ` : '') + `${n} ${n === 1 ? 'tak' : 'takken'} · ${when(m.updated)}`;
     const pick = card.querySelector('select');
     pick.append(new Option('Geen map', ''), ...names.map(f => new Option(f, f)), new Option('Nieuwe map…', '\n'));
