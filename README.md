@@ -168,7 +168,8 @@ Een nieuw wachtwoord stel je in via Supabase, onder Authentication → Users.
 De app heeft geen eigen vingerafdruk-login; de wachtwoordmanager van je apparaat doet dit. Je blijft per apparaat ingelogd, dus je hebt het alleen nodig bij de eerste keer en na uitloggen.
 
 - **iPhone en iPad:** log één keer in en kies **Bewaar wachtwoord** als iOS dat aanbiedt (of zet het zelf in de app Wachtwoorden bij `mvanoostenrijk-create.github.io`). Tik daarna in het inlogvenster op het wachtwoordveld, kies het voorstel boven het toetsenbord en bevestig met Face ID (iPhone) of Touch ID (iPad Air). Via iCloud-sleutelhanger staat het wachtwoord meteen op je andere Apple-apparaten. Controleer dat *Instellingen → Algemeen → Automatisch invullen en wachtwoorden* aan staat.
-- **Laptop:** laat de browser het wachtwoord bewaren. Op een Mac vraagt Safari bij het invullen om Touch ID. In Chrome en Edge zet je in de instellingen van de wachtwoordmanager aan dat invullen eerst om je vingerafdruk vraagt (Touch ID of Windows Hello).
+- **NordPass (of een andere wachtwoordmanager):** bewaar een item met het webadres van de app. Zet op iPhone/iPad NordPass aan onder *Automatisch invullen en wachtwoorden* en zet in NordPass ontgrendelen met Face ID/Touch ID aan; op de laptop gebruik je de browserextensie.
+- **Laptop zonder wachtwoordmanager:** laat de browser het wachtwoord bewaren. Op een Mac vraagt Safari bij het invullen om Touch ID. In Chrome en Edge zet je in de instellingen van de wachtwoordmanager aan dat invullen eerst om je vingerafdruk vraagt (Touch ID of Windows Hello).
 
 ## Todoist
 
