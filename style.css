@@ -166,6 +166,17 @@ body.home .mapOnly { display: none !important; }
 .card .fold { position: absolute; right: 16px; top: 16px; padding: 4px 8px; border-radius: 8px; cursor: pointer;
   background: var(--surface); border: 1px solid var(--line); }
 .card .fold select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+.card .cp { position: absolute; right: 62px; top: 16px; min-height: 0; padding: 4px 8px; border-radius: 8px; }
+.card.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent); }
+#pPick { display: none; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: -4px 0 14px; padding: 10px 14px; border-radius: 12px;
+  background: var(--surface); border: 1px solid var(--accent); font-size: 14px; }
+#pPick span { flex: 1; min-width: 200px; }
+body.picking #pPick { display: flex; }
+body.picking #pImp, body.picking #pAcct, body.picking .card .del, body.picking .card .fold, body.picking .card .cp, body.picking #pMsg { display: none; }
+#peekPaste { min-height: 30px; padding: 2px 8px; font-size: 13px; white-space: nowrap; color: var(--accent); border-color: var(--accent); }
+#peekDrop { min-height: 30px; min-width: 30px; padding: 2px 6px; font-size: 12px; }
+#fMap { flex: 1; min-width: 0; }
+#fMapBrowse { white-space: nowrap; }
 #pFolders { display: flex; flex-wrap: wrap; gap: 6px; margin: -4px 0 14px; }
 #pFolders:empty { display: none; }
 #pFolders button { border-radius: 999px; padding: 4px 12px; }
@@ -209,6 +220,10 @@ body.home .mapOnly { display: none !important; }
 .grow { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 #peekFiles { display: flex; gap: 6px; flex-wrap: wrap; }
 #peekFiles button { min-height: 30px; padding: 2px 8px; font-size: 13px; }
+#peekMap { min-height: 30px; padding: 2px 8px; font-size: 13px; white-space: nowrap; color: var(--accent); }
+#peekMap:disabled { color: var(--muted); opacity: 1; }
+#top #bBack { flex-shrink: 0; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+@media (max-width: 600px) { #bBack span { display: none; } }
 .sug label.del span { color: var(--danger); }
 
 /* iOS: de pagina zelf mag nooit schuiven, anders verdwijnt de bovenbalk na het typen */
