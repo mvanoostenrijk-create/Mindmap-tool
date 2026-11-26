@@ -79,6 +79,23 @@ let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
 let selLink = null, linking = null;
 let trail = [];   // [{id,title}] van mindmaps waar je via een doorklik vandaan komt (laatste = waar de terugknop heen gaat)
+let picking = null;   // {node,target} terwijl je in het overzicht een mindmap kiest voor een tak
+let hint = '', hintTimer = 0;   // korte melding onderin de editor
+// Gekopieerde koppeling naar een mindmap (vanuit het overzicht), per apparaat; wordt na plakken gewist
+const clip = (() => {
+  let mem = null;
+  return {
+    get() { try { return JSON.parse(localStorage.getItem('mm:clip')); } catch { return mem; } },
+    set(v) { mem = v; try { v ? localStorage.setItem('mm:clip', JSON.stringify(v)) : localStorage.removeItem('mm:clip'); } catch {} }
+  };
+})();
+// Adres van een mindmap in deze app (…/#m=<id>) → id, anders null
+const mapIdOf = s => {
+  try {
+    const u = new URL(String(s).trim()), here = new URL(location.href), path = x => x.pathname.replace(/index\.html$/, '');
+    return u.origin === here.origin && path(u) === path(here) && new URLSearchParams(u.hash.slice(1)).get('m') || null;
+  } catch { return null; }
+};
 // Whiteboard: losse elementen op het doek, `map.items = [{id,kind,x,y,w,h,text,color?}]` met kind note/rect/oval/text.
 let selItem = null, boardOpen = false, lay = 0, multiMode = false;
 const more = new Set();   // bij meervoudige selectie: alle gekozen elementen (selItem is dan het laatst gekozene)
@@ -251,7 +268,10 @@ function ui() {
   $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
   if (selItem) $('tEdit').disabled = false;
   const n = i && i.node;
-  $('peek').hidden = !(linking || n && (n.note || n.link || n.map || n.files?.length));
+  const cl = !linking && clip.get(), paste = cl && cl.id !== map.id && (store.title(cl.id) || cl.title);
+  $('peek').hidden = !(linking || paste || hint || n && (n.note || n.link || n.map || n.files?.length));
+  $('peekPaste').hidden = $('peekDrop').hidden = !paste;
+  if (paste) $('peekPaste').textContent = '🗺 Plak koppeling naar "' + paste.slice(0, 30) + '"';
   const to = !linking && n?.map, toTitle = to && store.title(to), pm = $('peekMap');
   pm.hidden = !to; pm.disabled = !toTitle;
   if (to) pm.textContent = toTitle ? '🗺 Open "' + toTitle.slice(0, 40) + '"' : '🗺 De gekoppelde mindmap staat niet op dit apparaat';
@@ -264,7 +284,7 @@ function ui() {
     return b;
   }));
   $('peekLink').hidden = !!linking || !(n && n.link);
-  $('peekNote').textContent = linking ? 'Tik op de tak of het element waarmee je wilt verbinden. Esc of een tik op de achtergrond annuleert.' : n && n.note || '';
+  $('peekNote').textContent = linking ? 'Tik op de tak of het element waarmee je wilt verbinden. Esc of een tik op de achtergrond annuleert.' : hint || n && n.note || '';
   if (n && n.link) { $('peekLink').href = n.link; $('peekLink').textContent = '🔗 ' + n.link.replace(/^https?:\/\//, '').slice(0, 40); }
   $('tSib').disabled = $('tDel').disabled = !i || !i.parent;
   if (selLink || selItem) $('tDel').disabled = false;
@@ -530,7 +550,7 @@ function nav(key) {
 }
 
 document.addEventListener('keydown', e => {
-  if (!map || isHome() || $('drawer').classList.contains('open') || !$('dlg').hidden || !$('fmt').hidden || e.target.matches('input,select,textarea')) { if (e.key === 'Escape') { closeDrawer(); todoist.close(); format.close(); } return; }
+  if (!map || isHome() || $('drawer').classList.contains('open') || !$('dlg').hidden || !$('fmt').hidden || e.target.matches('input,select,textarea')) { if (e.key === 'Escape') { closeDrawer(); todoist.close(); format.close(); if (picking) endPick(); } return; }
   if (editing) {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); commitEdit(); }
     else if (e.key === 'Escape') { e.preventDefault(); commitEdit(true); }
@@ -540,6 +560,7 @@ document.addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey, k = e.key;
   if (mod && k.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? timeTravel(redo, undo) : timeTravel(undo, redo); }
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); return timeTravel(redo, undo); }
+  if (mod && k.toLowerCase() === 'v' && clip.get()) { e.preventDefault(); return pasteMap(clip.get().id); }
   if (mod && k === 'Enter' && sel) { e.preventDefault(); const to = info.get(sel)?.node.map; if (to) follow(to); return; }
   if (mod || e.altKey) return;
   if (k === 'Escape' && (linking || selLink)) { linking = selLink = null; render(); return; }
@@ -627,6 +648,56 @@ async function follow(id) {
   go.onclick = () => { const to = sel && info.get(sel)?.node.map; if (to) follow(to); };
   $('peek').prepend(go);
 }
+function say(t) { hint = t; clearTimeout(hintTimer); hintTimer = setTimeout(() => { hint = ''; if (map && !isHome()) ui(); }, 6000); if (map && !isHome()) ui(); }
+// Plakken: nieuwe subtak onder de geselecteerde tak (anders onder het midden) met de titel van de mindmap, al gekoppeld
+async function pasteMap(id) {
+  commitEdit();
+  if (id === map.id) return say('Een tak kan niet doorklikken naar de mindmap waar hij zelf in staat.');
+  const m = await store.load(id);
+  if (!m) return say('Die mindmap staat (nog) niet op dit apparaat.');
+  const p = info.get(sel)?.node || map.root, c = { id: uid(), text: m.title, children: [], map: id };
+  if (p === map.root) {
+    const left = p.children.filter(x => x.side === 'left').length;
+    c.side = left < p.children.length - left ? 'left' : 'right'; c.color = nextColor();
+  }
+  if (clip.get()?.id === id) clip.set(null);
+  hint = ''; selLink = linking = selItem = null;
+  change(() => { p.collapsed = false; p.children.push(c); sel = c.id; });
+  ensureVisible(c.id);
+}
+document.addEventListener('paste', e => {   // adres van een mindmap plakken (Ctrl+V) zonder dat je in een tekstveld staat
+  if (!map || isHome() || editing || !$('fmt').hidden || !$('dlg').hidden || e.target.closest?.('input,textarea,select,[contenteditable="true"],[contenteditable="plaintext-only"]')) return;
+  const id = mapIdOf(e.clipboardData?.getData('text') || '');
+  if (id) { e.preventDefault(); pasteMap(id); }
+});
+// Kiezen uit het overzicht: het overzicht opent in een kiesstand; een tik op een kaart koppelt de tak en brengt je terug
+async function pickFromPortal(nodeId) {
+  const n = info.get(nodeId)?.node; if (!n) return;
+  commitEdit(); flush();
+  picking = { node: nodeId, target: n.map };
+  $('pPickText').textContent = 'Kies de mindmap waar "' + (n.text.trim() || 'deze tak').replace(/\s+/g, ' ').slice(0, 40) + '" naar doorklikt.';
+  await drawList();   // eerst de kaarten opbouwen, anders staan heel even de oude (zonder kiesstand) in beeld
+  if (picking?.node !== nodeId) return;
+  document.body.classList.add('home', 'picking'); document.title = 'Kies een mindmap';
+}
+function endPick(id) {
+  const p = picking; if (!p) return;
+  picking = null; document.body.classList.remove('home', 'picking');
+  const n = info.get(p.node)?.node;
+  if (n && id && id !== map.id && id !== n.map) change(() => { n.map = id; });
+  select(p.node); render();
+}
+{
+  const mk = (id, text, title) => Object.assign(document.createElement('button'), { id, textContent: text, title: title || '', hidden: true });
+  const put = mk('peekPaste', ''), drop = mk('peekDrop', '✕', 'Gekopieerde koppeling weggooien');
+  put.onclick = () => { const c = clip.get(); if (c) pasteMap(c.id); };
+  drop.onclick = () => { clip.set(null); ui(); };
+  $('peekMap').after(put, drop);
+  const bar = document.createElement('div'); bar.id = 'pPick';
+  bar.innerHTML = '<span id="pPickText"></span><button type="button">Annuleren</button>';
+  bar.lastChild.onclick = () => endPick();
+  $('pGrid').before(bar);
+}
 const FRESH = 'Nieuwe mindmap';
 const pristine = m => !m.root.children.length && m.root.text === FRESH;
 function replaceMap(m) {   // nieuwere versie van de open mindmap kwam binnen vanaf een ander apparaat
@@ -694,13 +765,16 @@ async function drawList() {
   // de pagina zelf kan nog even een oudere versie uit de cache zijn dan dit script: dan de balk hier aanmaken
   ($('pFolders') || $('pMsg').before(Object.assign(document.createElement('nav'), { id: 'pFolders' })) || $('pFolders')).replaceChildren(...bar);
   const add = document.createElement('button');
-  add.className = 'card new'; add.textContent = '+ Nieuwe mindmap' + (folder ? ` in "${folder}"` : ''); add.onclick = newMap; cards.push(add);
+  add.className = 'card new'; add.textContent = '+ Nieuwe mindmap' + (folder ? ` in "${folder}"` : ''); add.onclick = newMap;
+  if (!picking) cards.push(add);
   for (const m of all) {
     const it = m;
     if (q ? !m.title.toLowerCase().includes(q) : folder !== null && (m.folder || '') !== folder) continue;   // zoeken gaat door alle mappen
+    if (picking && m.id === map?.id) continue;   // naar zichzelf doorklikken kan niet
     const card = document.createElement('article'), n = countAll(m.root);
     card.className = 'card'; card.tabIndex = 0;
-    card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><label class="fold" title="Verplaatsen naar map">📁<select aria-label="Verplaatsen naar map"></select></label><button class="del" title="Verwijderen">✕</button>`;
+    card.innerHTML = `<div class="thumb">${miniSvg(m)}</div><h3></h3><p></p><label class="fold" title="Verplaatsen naar map">📁<select aria-label="Verplaatsen naar map"></select></label><button class="cp" title="Kopieer koppeling, om in een andere mindmap te plakken">🔗</button><button class="del" title="Verwijderen">✕</button>`;
+    if (picking?.target === m.id) card.classList.add('on');
     card.querySelector('h3').textContent = m.title; card.title = m.title;
     card.querySelector('p').textContent = (m.folder && (q || folder === null) ? `📁 ${m.folder} · ` : '') + `${n} ${n === 1 ? 'tak' : 'takken'} · ${when(m.updated)}`;
     const pick = card.querySelector('select');
@@ -708,8 +782,14 @@ async function drawList() {
     pick.value = m.folder || '';
     pick.onchange = () => { const name = pick.value === '\n' ? askFolder() : pick.value; if (name === (m.folder || '')) return drawList(); setFolder([m.id], name); };
     const go = async () => openMap(await store.load(it.id) || m), del = card.querySelector('.del');
-    card.onclick = e => { if (!e.target.closest('.del,.fold')) go(); };
-    card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) go(); };
+    const choose = () => picking ? endPick(m.id) : go();
+    card.onclick = e => { if (picking || !e.target.closest('.del,.fold,.cp')) choose(); };
+    card.onkeydown = e => { if (e.key === 'Enter' && e.target === card) choose(); };
+    card.querySelector('.cp').onclick = () => {
+      clip.set({ id: m.id, title: m.title });
+      $('pMsg').textContent = `Koppeling naar "${m.title}" gekopieerd. Open de andere mindmap, selecteer de tak waar hij onder moet en tik onderin op "Plak koppeling" (of Ctrl+V).`;
+      navigator.clipboard?.writeText(location.origin + location.pathname + '#m=' + m.id).catch(() => {});   // ook als adres, voor Ctrl+V of het linkveld
+    };
     del.onclick = async () => {
       if (del.textContent === '✕') { del.textContent = 'Zeker?'; return; }
       await store.remove(it.id);
@@ -849,6 +929,7 @@ function showPortal() {
 }
 async function route() {   // adres bepaalt wat je ziet: #m=<id> is een mindmap, anders het overzicht
   const id = new URLSearchParams(location.hash.slice(1)).get('m');
+  if (picking) { picking = null; document.body.classList.remove('picking'); }
   if (!id) return showPortal();
   if (map?.id === id && !isHome()) return;
   const back = !isHome() && trail.at(-1)?.id === id;   // browser-terug na een doorklik
@@ -1043,8 +1124,12 @@ const format = (() => {
     draw(); fillMaps(); media.reset(); files.reset(); $('fmt').hidden = false; $('shade').hidden = false;
   }
   // Doorklikken naar een andere mindmap: keuzelijst per map, plus een nieuwe mindmap met de tekst van deze tak als titel
-  const pick = document.createElement('select'), grp = document.createElement('label');
-  pick.id = 'fMap'; grp.append('Doorklikken naar mindmap', pick); $('fNote').closest('label').before(grp);
+  const pick = document.createElement('select'), grp = document.createElement('div'), pair = document.createElement('div'), browse = document.createElement('button');
+  pick.id = 'fMap'; pick.setAttribute('aria-label', 'Doorklikken naar mindmap');
+  browse.type = 'button'; browse.id = 'fMapBrowse'; browse.textContent = 'Kies uit overzicht…';
+  browse.onclick = () => { const nid = id; close(); pickFromPortal(nid); };
+  pair.className = 'pair'; pair.append(pick, browse); grp.className = 'grp'; grp.append('Doorklikken naar mindmap', pair);
+  $('fNote').closest('label').before(grp);
   async function fillMaps() {
     const n = node(); if (!n) return;
     const all = [];
@@ -1074,9 +1159,11 @@ const format = (() => {
   function close() {
     if ($('fmt').hidden) return;
     const n = node(), note = $('fNote').value.trim(); let link = $('fLink').value.trim();
+    const to = mapIdOf(link); if (to) link = '';   // adres van een mindmap in deze app wordt een doorklik, geen weblink
     if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
-    if (n && (note !== (n.note || '') || link !== (n.link || '')))
-      change(() => { if (note) n.note = note; else delete n.note; if (link) n.link = link; else delete n.link; });
+    const relink = to && to !== map.id && to !== n?.map;
+    if (n && (note !== (n.note || '') || link !== (n.link || '') || relink))
+      change(() => { if (note) n.note = note; else delete n.note; if (link) n.link = link; else delete n.link; if (relink) n.map = to; });
     $('fmt').hidden = true; $('shade').hidden = true; id = null;
   }
   const setTheme = () => { map.theme = { style: $('fStyle').value, edge: $('fEdge').value, palette: $('fPal').value }; touch(); render(); draw(); };
