@@ -64,7 +64,22 @@ Selecteer een tak en klik op "Opmaak".
 - **Afbeelding:** kies een eigen bestand of zoek een stockfoto. De afbeelding wordt verkleind tot een miniatuur en in de mindmap zelf bewaard; het origineel niet.
 - **Notitie:** extra toelichting. De tak krijgt een 🗒 en de notitie verschijnt onderin beeld als je de tak selecteert.
 - **Link:** een webadres. De tak krijgt een 🔗 en de link verschijnt onderin beeld als je de tak selecteert.
+- **Doorklikken naar mindmap:** koppel de tak aan een andere mindmap. Zie hieronder.
 - **Voorbeeld van de link:** de knop onder het linkveld maakt een schermafbeelding van de website en zet die als miniatuur in de tak. Het webadres gaat daarvoor naar de externe dienst Microlink; dat gebeurt alleen als je op de knop klikt. De gratis dienst heeft een daglimiet, en pagina's achter een login geven hooguit het inlogscherm.
+
+## Doorklikken naar een andere mindmap
+
+Een tak kan verwijzen naar een andere mindmap, bijvoorbeeld een overzichtsmindmap met per project een tak die doorklikt naar de mindmap van dat project.
+
+| Wat | Hoe |
+|---|---|
+| Tak koppelen aan een bestaande mindmap | Selecteer de tak, Opmaak → "Doorklikken naar mindmap" en kies de mindmap. Mindmaps in een map staan gegroepeerd onder de naam van die map |
+| Tak koppelen aan een nieuwe mindmap | Kies in dezelfde lijst "+ Nieuwe mindmap". Die krijgt de tekst van de tak als titel en komt in dezelfde map als de huidige mindmap |
+| Doorklikken | Selecteer de tak en tik onderin op "🗺 Open …", of druk Ctrl+Enter |
+| Terug | Knop "← <titel>" linksboven, of de terug-knop van de browser. Na meerdere doorklikken ga je stap voor stap terug |
+| Koppeling weghalen | Opmaak → "Doorklikken naar mindmap" → "Geen" |
+
+Een gekoppelde tak krijgt een 🗺. De koppeling gaat mee naar je andere apparaten en staat in de tekstexport als "(→ mindmap "titel")". Verwijder je de mindmap waar een tak naar verwijst, dan blijft de 🗺 staan en meldt de knop onderin dat de mindmap niet op dit apparaat staat; haal de koppeling dan weg of kies een andere. Een back-up terugzetten maakt een kopie met een nieuw adres: koppelingen naar het origineel wijzen niet vanzelf naar die kopie.
 
 ## Bijlagen
 

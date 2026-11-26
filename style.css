@@ -209,6 +209,10 @@ body.home .mapOnly { display: none !important; }
 .grow { flex: 1; min-width: 0; text-align: left; overflow: hidden; text-overflow: ellipsis; }
 #peekFiles { display: flex; gap: 6px; flex-wrap: wrap; }
 #peekFiles button { min-height: 30px; padding: 2px 8px; font-size: 13px; }
+#peekMap { min-height: 30px; padding: 2px 8px; font-size: 13px; white-space: nowrap; color: var(--accent); }
+#peekMap:disabled { color: var(--muted); opacity: 1; }
+#top #bBack { flex-shrink: 0; max-width: 34vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
+@media (max-width: 600px) { #bBack span { display: none; } }
 .sug label.del span { color: var(--danger); }
 
 /* iOS: de pagina zelf mag nooit schuiven, anders verdwijnt de bovenbalk na het typen */

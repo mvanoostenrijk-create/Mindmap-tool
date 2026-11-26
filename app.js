@@ -50,6 +50,7 @@ const store = (() => {
     },
     gone() { return JSON.parse(get(K + 'gone') || '{}'); },   // lokaal verwijderd, nog door te geven aan de cloud
     setGone(g) { set(K + 'gone', JSON.stringify(g)); },
+    title(id) { return idx().find(x => x.id === id)?.title; },   // synchroon, voor knoppen en export
     getLast() { return get(K + 'last'); },
     setLast(id) { set(K + 'last', id); }
   };
@@ -68,7 +69,7 @@ let COLORS = PALETTES.kleurrijk.c;
 // Thema hoort bij de mindmap (synct mee): stijl van de takken, vorm van de lijnen, kleurenschema.
 const theme = () => { const t = map?.theme || {}; return { style: t.style || 'omlijnd', edge: t.edge || 'boog', pal: PALETTES[t.palette] || PALETTES.kleurrijk }; };
 const pre = n => (n.icon ? n.icon + ' ' : '') + (n.task ? (n.task.gone ? '⚠ ' : n.task.done ? '☑ ' : '☐ ') : '');
-const post = n => (n.note ? ' 🗒' : '') + (n.link ? ' 🔗' : '') + (n.files?.length ? ' 📎' : '');
+const post = n => (n.note ? ' 🗒' : '') + (n.link ? ' 🔗' : '') + (n.map ? ' 🗺' : '') + (n.files?.length ? ' 📎' : '');
 const setLook = v => { v && v !== 'auto' ? document.documentElement.dataset.theme = v : delete document.documentElement.dataset.theme; };
 const getLook = () => { try { return localStorage.getItem('mm:look') || 'auto'; } catch { return 'auto'; } };
 setLook(getLook());
@@ -77,6 +78,7 @@ let map = null, sel = null, editing = null, editOrig = '';
 let view = { x: 0, y: 0, s: 1 };
 let undo = [], redo = [], saveTimer = 0;
 let selLink = null, linking = null;
+let trail = [];   // [{id,title}] van mindmaps waar je via een doorklik vandaan komt (laatste = waar de terugknop heen gaat)
 // Whiteboard: losse elementen op het doek, `map.items = [{id,kind,x,y,w,h,text,color?}]` met kind note/rect/oval/text.
 let selItem = null, boardOpen = false, lay = 0, multiMode = false;
 const more = new Set();   // bij meervoudige selectie: alle gekozen elementen (selItem is dan het laatst gekozene)
@@ -249,7 +251,13 @@ function ui() {
   $('tChild').disabled = $('tEdit').disabled = $('tTask').disabled = !i;
   if (selItem) $('tEdit').disabled = false;
   const n = i && i.node;
-  $('peek').hidden = !(linking || n && (n.note || n.link || n.files?.length));
+  $('peek').hidden = !(linking || n && (n.note || n.link || n.map || n.files?.length));
+  const to = !linking && n?.map, toTitle = to && store.title(to), pm = $('peekMap');
+  pm.hidden = !to; pm.disabled = !toTitle;
+  if (to) pm.textContent = toTitle ? '🗺 Open "' + toTitle.slice(0, 40) + '"' : '🗺 De gekoppelde mindmap staat niet op dit apparaat';
+  const back = trail.at(-1)?.title;
+  $('bBack').hidden = !back;
+  if (back) { $('bBack').innerHTML = '←<span></span>'; $('bBack').lastChild.textContent = ' ' + back; $('bBack').title = 'Terug naar ' + back; }
   $('peekFiles').replaceChildren(...(linking || !n ? [] : n.files || []).map(f => {
     const b = document.createElement('button'); b.textContent = '📎 ' + f.name;
     b.onclick = async () => { if (!await files.open(f)) $('peekNote').textContent = 'Bijlage openen lukt niet. Ben je ingelogd en online?'; };
@@ -532,6 +540,7 @@ document.addEventListener('keydown', e => {
   const mod = e.ctrlKey || e.metaKey, k = e.key;
   if (mod && k.toLowerCase() === 'z') { e.preventDefault(); return e.shiftKey ? timeTravel(redo, undo) : timeTravel(undo, redo); }
   if (mod && k.toLowerCase() === 'y') { e.preventDefault(); return timeTravel(redo, undo); }
+  if (mod && k === 'Enter' && sel) { e.preventDefault(); const to = info.get(sel)?.node.map; if (to) follow(to); return; }
   if (mod || e.altKey) return;
   if (k === 'Escape' && (linking || selLink)) { linking = selLink = null; render(); return; }
   if (selLink && (k === 'Delete' || k === 'Backspace')) { e.preventDefault(); return removeSel(); }
@@ -589,8 +598,9 @@ $('bOut').onclick = () => zoomCenter(0.8);
 $('bFit').onclick = fit;
 
 /* ---------- Mindmaps beheren ---------- */
-async function openMap(m) {
+async function openMap(m, keepTrail) {
   commitEdit(); flush();
+  if (!keepTrail) trail = [];
   map = m; undo = []; redo = []; sel = m.root.id;
   for (const el of [...els.values(), ...iels.values()]) el.remove();
   els.clear(); iels.clear();
@@ -600,6 +610,22 @@ async function openMap(m) {
   if (location.hash !== '#m=' + m.id) history.pushState(null, '', '#m=' + m.id);
   render(); fit();
   todoist.refresh();
+}
+// Doorklikken: een tak kan naar een andere mindmap wijzen (`node.map` = id). De terugknop volgt `trail`.
+async function follow(id) {
+  commitEdit();
+  const m = await store.load(id);
+  if (!m || m.id === map?.id) return;   // niet gevonden: de knop onderin zegt dat al
+  if (map) trail = [...trail, { id: map.id, title: map.title }].slice(-50);
+  openMap(m, true);
+}
+{
+  const back = Object.assign(document.createElement('button'), { id: 'bBack', hidden: true });
+  back.onclick = async () => { const m = trail.length && await store.load(trail.pop().id); m ? openMap(m, true) : ui(); };
+  $('bHome').after(back);
+  const go = Object.assign(document.createElement('button'), { id: 'peekMap', hidden: true });
+  go.onclick = () => { const to = sel && info.get(sel)?.node.map; if (to) follow(to); };
+  $('peek').prepend(go);
 }
 const FRESH = 'Nieuwe mindmap';
 const pristine = m => !m.root.children.length && m.root.text === FRESH;
@@ -825,8 +851,10 @@ async function route() {   // adres bepaalt wat je ziet: #m=<id> is een mindmap,
   const id = new URLSearchParams(location.hash.slice(1)).get('m');
   if (!id) return showPortal();
   if (map?.id === id && !isHome()) return;
+  const back = !isHome() && trail.at(-1)?.id === id;   // browser-terug na een doorklik
+  if (back) trail.pop();
   const m = await store.load(id);
-  m ? openMap(m) : showPortal();
+  m ? openMap(m, back) : showPortal();
 }
 addEventListener('popstate', route);
 $('bHome').onclick = showPortal;
@@ -958,6 +986,7 @@ function outline() {
     for (const c of n.children) {
       const t = c.task && !c.task.gone ? c.task : null;
       s += '  '.repeat(depth) + '- ' + (t ? (t.done ? '[x] ' : '[ ] ') : '') + label(c)
+        + (c.map ? ' (→ mindmap "' + (store.title(c.map) || '?') + '")' : '')
         + (t?.due && !t.done ? ' (deadline ' + fmtDue(t.due) + ')' : '') + '\n';
       if (c.note) s += '  '.repeat(depth + 1) + '> ' + flat(c.note) + '\n';
       for (const f of c.files || []) s += '  '.repeat(depth + 1) + '- 📎 ' + f.name + '\n';
@@ -1011,8 +1040,37 @@ const format = (() => {
     id = sel; const n = node(), t = map.theme || {};
     $('fNote').value = n.note || ''; $('fLink').value = n.link || '';
     $('fStyle').value = t.style || 'omlijnd'; $('fEdge').value = t.edge || 'boog'; $('fPal').value = t.palette || 'kleurrijk';
-    draw(); media.reset(); files.reset(); $('fmt').hidden = false; $('shade').hidden = false;
+    draw(); fillMaps(); media.reset(); files.reset(); $('fmt').hidden = false; $('shade').hidden = false;
   }
+  // Doorklikken naar een andere mindmap: keuzelijst per map, plus een nieuwe mindmap met de tekst van deze tak als titel
+  const pick = document.createElement('select'), grp = document.createElement('label');
+  pick.id = 'fMap'; grp.append('Doorklikken naar mindmap', pick); $('fNote').closest('label').before(grp);
+  async function fillMaps() {
+    const n = node(); if (!n) return;
+    const all = [];
+    for (const it of await store.list()) if (it.id !== map.id) { const m = await store.load(it.id); if (m) all.push(m); }
+    if (node() !== n) return;   // venster is intussen dicht of gaat over een andere tak
+    all.sort((a, b) => a.title.localeCompare(b.title, 'nl'));
+    const groups = new Map(), opts = [new Option('Geen', '')];
+    for (const m of all) { const f = m.folder || ''; if (!groups.has(f)) groups.set(f, []); groups.get(f).push(new Option(m.title.slice(0, 60), m.id)); }
+    const names = [...groups.keys()].sort((a, b) => !a - !b || a.localeCompare(b, 'nl'));   // "Zonder map" achteraan
+    if (names.length === 1 && !names[0]) opts.push(...groups.get(''));
+    else for (const f of names) { const og = document.createElement('optgroup'); og.label = f ? '📁 ' + f : 'Zonder map'; og.append(...groups.get(f)); opts.push(og); }
+    if (n.map && !all.some(m => m.id === n.map)) opts.push(new Option('(staat niet op dit apparaat)', n.map));
+    opts.push(new Option('+ Nieuwe mindmap "' + (n.text.trim() || FRESH).replace(/\s+/g, ' ').slice(0, 40) + '"', '\n'));
+    pick.replaceChildren(...opts); pick.value = n.map || '';
+  }
+  pick.onchange = async () => {
+    const n = node(); if (!n) return;
+    let to = pick.value;
+    if (to === '\n') {   // nieuwe, lege mindmap in dezelfde map als deze
+      const text = n.text.trim() || FRESH, m = { id: uid(), title: text, updated: Date.now(), root: { id: uid(), text, children: [] } };
+      if (map.folder) m.folder = map.folder;
+      await store.save(m); to = m.id;
+    }
+    change(() => { if (to) n.map = to; else delete n.map; });
+    fillMaps();
+  };
   function close() {
     if ($('fmt').hidden) return;
     const n = node(), note = $('fNote').value.trim(); let link = $('fLink').value.trim();
